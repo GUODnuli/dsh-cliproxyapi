@@ -1,0 +1,50 @@
+{
+  "name": "dsh-cliproxyapi",
+  "version": "2.3.5",
+  "description": "Native Codex and Antigravity subscription accounts inside DeepSeek Harness, based on CLIProxyAPI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/new-Beginner/dsh-cliproxyapi.git"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "dsh",
+    "cliproxyapi",
+    "codex",
+    "antigravity",
+    "gemini"
+  ],
+  "type": "module",
+  "main": "index.js",
+  "exports": { ".": "./index.js", "./web": "./src/web.js", "./client": "./client.js", "./package.json": "./package.json" },
+  "files": ["index.js", "client.js", "src/", "cordis.patch.yml", "README.md", "README_CN.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": { "inject": ["@deepseek-ai/dsh-api-remotes", "@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-model-selection", "@deepseek-ai/dsh-client-ui-settings"], "platform": "web" }
+  },
+  "engines": { "node": ">=22.19.0" },
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/dsh-llm": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-credentials": "^0.1.5-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.0",
+    "@deepseek-ai/dsh-tools": "^0.1.5-rc.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-llm": { "optional": true },
+    "@deepseek-ai/dsh-credentials": { "optional": true },
+    "@deepseek-ai/schemastery": { "optional": true },
+    "@deepseek-ai/dsh-tools": { "optional": true }
+  },
+  "dependencies": { "https-proxy-agent": "7.0.6" },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:integration": "node --test test/integration.test.js",
+    "pack:plugin": "npm pack --ignore-scripts"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh": "0.1.5-rc.1",
+    "pnpm": "11.7.0"
+  }
+}

@@ -1,0 +1,7 @@
+node_modules/
+*.tgz
+.test-home*/
+.runtime/
+*.log
+.npm-cache/
+.superdesign/tmp/

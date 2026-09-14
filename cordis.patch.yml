@@ -1,0 +1,5 @@
+- insert:
+    - id: cpa-subscriptions
+      name: dsh-cliproxyapi
+    - id: cpa-subscriptions-web
+      name: dsh-cliproxyapi/web

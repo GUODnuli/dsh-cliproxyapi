@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "targets": {
+    "settings:cpa-subscriptions": {
+      "targetKind": "existing-ui",
+      "projectId": "1b415dd1-0fa8-46be-929f-d78e12129fa9",
+      "baselineDraftId": "e1f2c096-f6ec-425c-8b10-41f773773fd9",
+      "activeDraftId": "9d52cac7-ea8e-415c-94b4-107b0c71355a",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "1d2f4b85-3a1f-4c57-b234-9a1f4638d0a1"
+      ],
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "client.js:7:531",
+        "client.js:1003:1033",
+        "client.js:1243:1593",
+        "client.js:1968:2317"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "c6338c1fafd7c25f9d2e51a01aebc799f2350cfb96e3f9cb296d471d00b536f5",
+        "client.js": "c4c5e5afda476f81999e3b65690acf800fc2bbec3c7c4c17e18f34dfdd1e6bcc"
+      },
+      "drafts": {
+        "e1f2c096-f6ec-425c-8b10-41f773773fd9": {
+          "title": "Current CPA Subscription Settings",
+          "visualDirection": "faithful current-source baseline",
+          "currentVersion": 1
+        },
+        "9d52cac7-ea8e-415c-94b4-107b0c71355a": {
+          "title": "方案 A · Harness 原生精简型",
+          "visualDirection": "compact native control console with a 640px embedded content width and balanced two-column quota grid",
+          "parentDraftId": "e1f2c096-f6ec-425c-8b10-41f773773fd9",
+          "currentVersion": 3
+        },
+        "8f2badb3-e824-4b1b-bf3d-cbab8a4bac66": {
+          "title": "方案 B · 额度仪表盘型",
+          "visualDirection": "quota-first comparison dashboard",
+          "parentDraftId": "e1f2c096-f6ec-425c-8b10-41f773773fd9",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-09-13T12:30:32.3063271Z"
+    }
+  }
+}
