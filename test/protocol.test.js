@@ -35,6 +35,24 @@ test('Codex tool stream preserves arguments, encrypted replay, and cache-disjoin
   assert.equal(codexRequest(options).input.some(i => i.encrypted_content), false, 'edited history must not resurrect stale replay');
 });
 
+test('provider requests ignore assistant-only blocks embedded in user notices', () => {
+  const notice = message('user', [
+    { type: 'text', text: 'Background subagent failed before it finished.' },
+    { type: 'reasoning', text: 'unfinished child reasoning' },
+    { type: 'tool-call', id: 'call_orphan', name: 'read', arguments: '{"file_path":"unfinished.txt"}' },
+  ], { kind: 'subagent-settled', form: 'notice' });
+
+  const codex = codexRequest({ provider: 'cpa-codex', model: 'test-codex', messages: [notice] });
+  assert.deepEqual(codex.input, [{ role: 'user', content: [{
+    type: 'input_text', text: 'Background subagent failed before it finished.',
+  }] }]);
+
+  const antigravity = antigravityRequest({ provider: 'cpa-antigravity', model: 'gemini-test', messages: [notice] }, 'project-one');
+  assert.deepEqual(antigravity.request.contents, [{ role: 'user', parts: [{
+    text: 'Background subagent failed before it finished.',
+  }] }]);
+});
+
 test('Antigravity preserves thought signatures and function ids across tool-result continuation', async () => {
   const result = await collect(antigravityStream(sse([
     { response: { candidates: [{ content: { parts: [{ text: '思考', thought: true, thoughtSignature: 'signed-reason' }] } }] } },

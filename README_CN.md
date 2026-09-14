@@ -2,6 +2,10 @@
 
 Codex、Antigravity 直接在 Harness 内使用；无需运行 CLIProxyAPI 服务。
 
+<p align="center">
+  <img src="assets/settings-preview.png" alt="DeepSeek Harness 订阅账号设置面板预览" width="800" />
+</p>
+
 ## 本次升级 (2.3.5)
 
 - **强化 Antigravity 工具参数 Schema 兼容性**：深度兼容 Harness 工具复杂 schema（联合类型 `oneOf`/`anyOf`/`allOf`、`const` 以及各类字符串/数字/数组约束），将其投影为 Google Gemini 严格子集结构，将约束平滑转入 description，彻底解决带联合类型/约束的工具声明被拒问题。

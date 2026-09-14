@@ -6,6 +6,10 @@
 Native Codex and Antigravity subscription accounts inside DeepSeek Harness, based on CLIProxyAPI.  
 无需单独启动或运行外部 CLIProxyAPI 后台，直接在 DeepSeek Harness 内无缝使用 Codex、Antigravity（Gemini）订阅账号。
 
+<p align="center">
+  <img src="assets/settings-preview.png" alt="DeepSeek Harness 订阅账号设置面板预览" width="800" />
+</p>
+
 ---
 
 ## 特性亮点 (Highlights)

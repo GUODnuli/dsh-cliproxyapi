@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepSeek Harness - 订阅账号设置</title>
+<style>
+  :root {
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --border-light: rgba(148, 163, 184, 0.22);
+    --border-card: rgba(148, 163, 184, 0.28);
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --success: #10b981;
+    --danger: #ef4444;
+    --codex-color: #10a37f;
+    --gemini-color: #4285f4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: #f8fafc;
+    margin: 0;
+    padding: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+  }
+  .window {
+    width: 960px;
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 16px 36px -10px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+    display: flex;
+  }
+  /* 侧边栏 */
+  .sidebar {
+    width: 200px;
+    background: #f8fafc;
+    border-right: 1px solid var(--border-light);
+    padding: 18px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex-shrink: 0;
+  }
+  .sidebar-header {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    padding: 4px 10px 14px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 11px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+  .nav-item.active {
+    background: #e2e8f0;
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+  .nav-icon {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+
+  /* 主内容区 */
+  .main-content {
+    flex: 1;
+    padding: 22px 28px 26px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background: #ffffff;
+    min-width: 0;
+  }
+
+  /* 顶部窗口控制条 */
+  .window-topbar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: -4px;
+  }
+  .top-btn {
+    font-size: 12px;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    padding: 3px 10px;
+    background: #ffffff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .close-btn {
+    font-size: 16px;
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+
+  /* 标题行 */
+  .cpa-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .cpa-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .cpa-title {
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+  }
+  .cpa-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--primary);
+    background: rgba(37, 99, 235, 0.08);
+    border: 1px solid rgba(37, 99, 235, 0.22);
+    border-radius: 5px;
+    padding: 2px 6px;
+  }
+  .cpa-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 3px;
+  }
+  .cpa-header-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .btn {
+    height: 31px;
+    padding: 0 12px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 550;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border-light);
+    background: #ffffff;
+    color: var(--text-primary);
+  }
+  .btn-primary {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #ffffff;
+  }
+  .btn-danger {
+    color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.22);
+    background: transparent;
+  }
+
+  /* 标签页 */
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 3px;
+    padding: 3px;
+    background: #f1f5f9;
+    border: 1px solid var(--border-light);
+    border-radius: 9px;
+  }
+  .tab {
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    border: none;
+    background: transparent;
+  }
+  .tab.active {
+    background: #ffffff;
+    color: var(--text-primary);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.07);
+  }
+  .tab-count {
+    font-size: 10px;
+    background: #e2e8f0;
+    color: var(--text-secondary);
+    padding: 1px 5px;
+    border-radius: 99px;
+  }
+
+  /* 状态指示条 */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #f8fafc;
+    border: 1px solid var(--border-light);
+    border-radius: 9px;
+    font-size: 11.5px;
+    color: var(--text-muted);
+  }
+  .status-items {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .status-item strong {
+    color: var(--text-primary);
+    margin-left: 4px;
+    font-weight: 600;
+  }
+  .status-sync {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-secondary);
+  }
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--success);
+    border-radius: 50%;
+  }
+
+  /* 渠道卡片 */
+  .provider-card {
+    border: 1px solid var(--border-card);
+    border-radius: 11px;
+    padding: 14px 16px;
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
+  }
+  .provider-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .provider-identity {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+  }
+  .provider-logo {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .logo-codex {
+    background: #10a37f;
+    color: #ffffff;
+  }
+  .logo-antigravity {
+    background: #eef2ff;
+    color: #4338ca;
+  }
+  .provider-title {
+    font-size: 14px;
+    font-weight: 650;
+    color: var(--text-primary);
+  }
+  .provider-meta {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin-top: 1px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .badge-connected {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 550;
+    color: #059669;
+    background: #ecfdf5;
+    padding: 3px 8px;
+    border-radius: 5px;
+  }
+
+  /* 额度网格 */
+  .quota-box {
+    background: #f8fafc;
+    border: 1px solid var(--border-light);
+    border-radius: 9px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .quota-title {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .quota-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .quota-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .quota-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .quota-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .quota-val {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .progress-bar {
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--codex-color);
+    border-radius: 99px;
+  }
+  .quota-reset {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .provider-actions {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .spacer { flex: 1; }
+
+  /* 模型目录微调区 */
+  .model-section {
+    border: 1px solid var(--border-card);
+    border-radius: 11px;
+    padding: 13px 16px;
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .section-title {
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .filter-pills {
+    display: flex;
+    gap: 5px;
+  }
+  .pill {
+    padding: 2px 8px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 500;
+    background: #f1f5f9;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-light);
+  }
+  .pill.active {
+    background: #0f172a;
+    color: #ffffff;
+    border-color: #0f172a;
+  }
+  .model-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 11px;
+    background: #f8fafc;
+    border: 1px solid var(--border-light);
+    border-radius: 7px;
+  }
+  .model-info-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .model-info-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .toggle-switch {
+    width: 32px;
+    height: 17px;
+    background: #2563eb;
+    border-radius: 99px;
+    position: relative;
+  }
+  .toggle-knob {
+    width: 13px;
+    height: 13px;
+    background: #ffffff;
+    border-radius: 50%;
+    position: absolute;
+    top: 2px;
+    right: 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="window">
+  <!-- 侧边栏导航 -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      设置
+    </div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      通用设置
+    </div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+      模型
+    </div>
+    <div class="nav-item active">
+      <svg class="nav-icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      订阅账号
+    </div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 2v6"/><path d="m4.93 10.93 4.24 4.24"/><path d="M2 18h6"/><path d="M18 18h4"/><path d="m14.83 15.17 4.24-4.24"/><path d="m14 8 2.5-2.5"/><path d="m10 8-2.5-2.5"/></svg>
+      插件
+    </div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+      Agent 预设
+    </div>
+  </aside>
+
+  <!-- 主内容 -->
+  <main class="main-content">
+    <div class="window-topbar">
+      <div class="top-btn">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+        打开配置文件
+      </div>
+      <div class="close-btn">✕</div>
+    </div>
+
+    <header class="cpa-header">
+      <div>
+        <div class="cpa-title-wrap">
+          <h2 class="cpa-title">CLIProxyAPI 订阅服务</h2>
+          <span class="cpa-badge">2.3.5</span>
+        </div>
+        <div class="cpa-desc">原生连接 OpenAI Codex 与 Google Antigravity 订阅账号，统一调度模型与图片生成</div>
+      </div>
+      <div class="cpa-header-actions">
+        <button class="btn btn-primary">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+          刷新所有额度
+        </button>
+        <button class="btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          重新读取
+        </button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        账号与模型 <span class="tab-count">6/36</span>
+      </button>
+      <button class="tab">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+        图片工坊
+      </button>
+      <button class="tab">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+        网络代理
+      </button>
+      <button class="tab">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        系统诊断
+      </button>
+    </nav>
+
+    <section class="status-bar">
+      <div class="status-items">
+        <span>账号连接<strong>2/2 个已连接</strong></span>
+        <span>已开放模型<strong>6 个</strong></span>
+        <span>最近额度同步<strong>16:50</strong></span>
+      </div>
+      <div class="status-sync">
+        <span class="status-dot"></span>
+        <span>启动自动同步已开启</span>
+      </div>
+    </section>
+
+    <!-- Codex 账号 -->
+    <article class="provider-card">
+      <div class="provider-header">
+        <div class="provider-identity">
+          <div class="provider-logo logo-codex">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1683a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4947zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1683a.0757.0757 0 0 1-.071 0l-4.8303-2.7866A4.504 4.504 0 0 1 2.3408 7.8956zm16.0993 3.8558L12.5973 8.3829l2.0201-1.1635a.0804.0804 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.4023-.6863zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.6601l-.0175-.0175zM12 10.5367l2.8426 1.6416v3.2832L12 17.1031l-2.8426-1.6416V12.1783L12 10.5367z"/></svg>
+          </div>
+          <div>
+            <div class="provider-title">Codex 订阅 · CPA</div>
+            <div class="provider-meta">
+              <span>jliu63902@gmail.com</span>
+              <span>· 已登录</span>
+            </div>
+          </div>
+        </div>
+        <span class="badge-connected"><span class="status-dot"></span>已连接</span>
+      </div>
+
+      <div class="quota-box">
+        <div class="quota-title">
+          <span>模型额度 · Pro</span>
+          <span>更新于 16:50</span>
+        </div>
+        <div class="quota-grid">
+          <div class="quota-item">
+            <div class="quota-item-header">
+              <span class="quota-label">每周额度</span>
+              <span class="quota-val">剩余 75%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" style="width: 75%;"></div></div>
+            <span class="quota-reset">重置于 09/19 16:10</span>
+          </div>
+          <div class="quota-item">
+            <div class="quota-item-header">
+              <span class="quota-label">Spark (5小时)</span>
+              <span class="quota-val">剩余 100%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" style="width: 100%;"></div></div>
+            <span class="quota-reset">重置于 09/13 21:50</span>
+          </div>
+          <div class="quota-item">
+            <div class="quota-item-header">
+              <span class="quota-label">Spark (每周)</span>
+              <span class="quota-val">剩余 100%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" style="width: 100%;"></div></div>
+            <span class="quota-reset">重置于 09/20 16:50</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="provider-actions">
+        <button class="btn">重新登录</button>
+        <button class="btn">刷新额度</button>
+        <button class="btn">刷新模型</button>
+        <div class="spacer"></div>
+        <button class="btn btn-danger">退出账号</button>
+      </div>
+    </article>
+
+    <!-- Antigravity 账号 -->
+    <article class="provider-card">
+      <div class="provider-header">
+        <div class="provider-identity">
+          <div class="provider-logo logo-antigravity">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z"/></svg>
+          </div>
+          <div>
+            <div class="provider-title">Antigravity 订阅 · CPA</div>
+            <div class="provider-meta">
+              <span>junliu4075@gmail.com</span>
+              <span>· 已登录</span>
+            </div>
+          </div>
+        </div>
+        <span class="badge-connected"><span class="status-dot"></span>已连接</span>
+      </div>
+
+      <div class="quota-box">
+        <div class="quota-title">
+          <span>模型额度</span>
+          <span>来自 Google 官方订阅端点</span>
+        </div>
+        <div style="font-size: 11.5px; color: var(--text-muted); padding: 2px 0;">
+          已获取项目 ID：<code>project-antigravity-902</code> · 点击“刷新额度”读取当前模型余量
+        </div>
+      </div>
+
+      <div class="provider-actions">
+        <button class="btn">重新登录</button>
+        <button class="btn">刷新额度</button>
+        <button class="btn">刷新模型</button>
+        <div class="spacer"></div>
+        <button class="btn btn-danger">退出账号</button>
+      </div>
+    </article>
+
+    <!-- 模型目录 -->
+    <section class="model-section">
+      <div class="section-head">
+        <div class="section-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+          模型目录与能力调优
+        </div>
+        <div class="filter-pills">
+          <span class="pill active">全部渠道</span>
+          <span class="pill">Codex</span>
+          <span class="pill">Antigravity</span>
+          <span class="pill">仅已开放</span>
+        </div>
+      </div>
+      <div class="model-item">
+        <div>
+          <div class="model-info-title">GPT-5.4</div>
+          <div class="model-info-sub">gpt-5.4 · 上下文 272,000 Token · 思考强度 [low ~ ultra] · 图片识别开启</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button class="btn" style="height: 27px; padding: 0 10px; font-size: 11.5px;">调优</button>
+          <div class="toggle-switch"><div class="toggle-knob"></div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+</body>
+</html>

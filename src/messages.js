@@ -22,6 +22,7 @@ export function history(options) {
 }
 
 export function replayFor(message, options, protocol) {
+  if (message.role !== 'assistant') return;
   const state = message.source?.replayState?.response;
   if (message.source?.provider !== options.provider || message.source?.model !== options.model
     || state?.version !== 1 || state?.protocol !== protocol || state?.hash !== digest(message.content)) return;
@@ -39,7 +40,8 @@ export function codexRequest(options, { verbosity } = {}) {
       if (block.type === 'text' && block.text) input.push({ role: message.role,
         content: [{ type: message.role === 'assistant' ? 'output_text' : 'input_text', text: block.text }] });
       if (block.type === 'image') input.push({ role: 'user', content: codexImageParts(block, options) });
-      if (block.type === 'tool-call') input.push({ type: 'function_call', call_id: block.id, name: block.name, arguments: block.arguments });
+      if (message.role === 'assistant' && block.type === 'tool-call')
+        input.push({ type: 'function_call', call_id: block.id, name: block.name, arguments: block.arguments });
       if (block.type === 'tool-result') {
         input.push({ type: 'function_call_output', call_id: block.toolCallId, output: textOf(block.content) });
         for (const image of block.content.filter(b => b.type === 'image')) input.push({ role: 'user', content: codexImageParts(image, options) });
@@ -150,14 +152,14 @@ export function antigravityRequest(options, projectId) {
   const { messages, system } = history(options);
   const contents = [], names = new Map();
   for (const message of messages) for (const block of message.content)
-    if (block.type === 'tool-call') names.set(block.id, block.name);
+    if (message.role === 'assistant' && block.type === 'tool-call') names.set(block.id, block.name);
   for (const message of messages) {
     const replay = replayFor(message, options, 'antigravity');
     const parts = replay?.parts ? structuredClone(replay.parts) : [];
     if (!replay?.parts) for (const block of message.content) {
       if (block.type === 'text' && block.text) parts.push({ text: block.text });
       if (block.type === 'image') parts.push(...geminiImageParts(block, options));
-      if (block.type === 'tool-call') {
+      if (message.role === 'assistant' && block.type === 'tool-call') {
         let args; try { args = JSON.parse(block.arguments); }
         catch { throw new LlmError('历史工具参数不是有效 JSON。', 'INVALID_REQUEST'); }
         parts.push({ functionCall: { name: block.name, args, id: block.id } });
