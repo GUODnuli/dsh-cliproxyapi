@@ -5,7 +5,7 @@ import { SubscriptionAdapter } from '../src/adapter.js';
 import { Accounts } from '../src/accounts.js';
 import { PreferencesSchema, normalizeModels, modelDisplayName } from '../src/catalog.js';
 import { antigravityHeaders, antigravityUserAgent } from '../src/oauth.js';
-import { projectImages, codexRequest, antigravityRequest } from '../src/messages.js';
+import { projectImages, codexRequest, antigravityRequest, geminiSchema } from '../src/messages.js';
 import { Images, createImageTool } from '../src/images.js';
 import { checkedFetch } from '../src/http.js';
 import { createNetwork } from '../src/network.js';
@@ -245,6 +245,40 @@ test('a bare 400 still names the provider status code', async () => {
   assert.equal(error.message, '上游返回 HTTP 400（INVALID_ARGUMENT）。');
 });
 
+test('tool schema projection keeps const types and gives untyped properties a type', () => {
+  const projected = geminiSchema({ type: 'object', properties: {
+    mode: { const: true }, retries: { const: 3 }, note: { title: 'Note', default: 'x' },
+    choice: { const: 'a' }, list: { type: 'array', items: { title: 'Item' } },
+  }, required: ['mode', 'note'] });
+  assert.deepEqual(projected.properties.mode, { type: 'boolean', description: 'Constraints: const=true.' });
+  assert.deepEqual(projected.properties.retries, { type: 'integer', description: 'Constraints: const=3.' });
+  assert.deepEqual(projected.properties.choice, { enum: ['a'] });
+  assert.deepEqual(projected.properties.note, { type: 'string', description: 'Constraints: untyped schema projected as string.' });
+  assert.deepEqual(projected.properties.list, { type: 'array', items: { type: 'string', description: 'Constraints: untyped schema projected as string.' } });
+  assert.deepEqual(projected.required, ['mode', 'note']);
+  assert.equal(JSON.stringify(projected).includes('"const":'), false);
+  assert.equal(JSON.stringify(projected).includes('"default":'), false);
+});
+
+test('a 400 keeps the truncated provider message that names the rejected field', async () => {
+  const error = await checkedFetch(async () => new Response(JSON.stringify({ error: { code: 400, status: 'INVALID_ARGUMENT',
+    message: 'Unknown name "const" at \'request.tools[0].function_declarations[3].parameters.properties[mode]\'.' } }),
+  { status: 400, headers: { 'content-type': 'application/json' } }), 'https://example.test', {})
+    .then(() => assert.fail('expected a rejection'), failure => failure);
+  assert.match(error.message, /INVALID_ARGUMENT/);
+  assert.match(error.message, /Unknown name "const"/);
+  assert.match(error.message, /function_declarations\[3\]/);
+});
+
+test('a provider message is truncated and never echoes a bearer token', async () => {
+  const error = await checkedFetch(async () => new Response(JSON.stringify({ error: { code: 400,
+    message: 'bad request Bearer abc.def.ghi ' + 'x'.repeat(600) } }),
+  { status: 400, headers: { 'content-type': 'application/json' } }), 'https://example.test', {})
+    .then(() => assert.fail('expected a rejection'), failure => failure);
+  assert.doesNotMatch(error.message, /abc\.def\.ghi/);
+  assert.ok(error.message.length < 600);
+});
+
 test('rate limits are not retried on a fixed backoff', () => {
   const adapter = new SubscriptionAdapter(new Accounts(memoryCredentials(), Config({}), async () => json({})),
     { get: () => ({ codex: [], antigravity: [] }) });
@@ -264,6 +298,10 @@ test('system carriage stays native unless user-prefix is explicitly configured',
     '[System Instructions]\nharness rule\n[/System Instructions]\n\n');
   assert.equal(prefixed.request.contents[0].parts[1].text, 'hi');
   assert.equal(prefixed.request.contents.length, 1);
+  assert.deepEqual(prefixed.request.systemInstruction.parts.map(part => typeof part.text === 'string' && part.text.length > 0), [true]);
+  const roles = prefixed.request.contents.map(turn => turn.role);
+  assert.equal(roles.some((role, index) => index > 0 && role === roles[index - 1]), false);
+  assert.equal(prefixed.request.contents.every(turn => turn.parts.length > 0), true);
 });
 
 test('cancelling one catalog waiter does not cancel the shared provider refresh', async () => {

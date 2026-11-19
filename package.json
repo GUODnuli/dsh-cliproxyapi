@@ -1,6 +1,6 @@
 {
   "name": "dsh-cliproxyapi",
-  "version": "2.3.6-dsh.11",
+  "version": "2.3.6-dsh.12",
   "description": "Native Codex and Antigravity subscription accounts inside DeepSeek Harness, based on CLIProxyAPI",
   "repository": {
     "type": "git",

@@ -109,9 +109,9 @@ function mergeSchemas(base, extension) {
 
 // Antigravity accepts only a strict subset of JSON Schema. Project unions and move unsupported
 // validation constraints into descriptions instead of letting one declaration reject the request.
-export function geminiSchema(value) {
+export function geminiSchema(value, options = {}) {
   if (!value || typeof value !== 'object') return value;
-  if (Array.isArray(value)) return value.map(geminiSchema);
+  if (Array.isArray(value)) return value.map(item => geminiSchema(item, options));
   if ('$ref' in value) throw new LlmError('工具参数包含尚未展开的 JSON Schema $ref。', 'UNSUPPORTED_OPTION');
   const result = {}, hints = [];
   let alternatives, intersections;
@@ -120,8 +120,8 @@ export function geminiSchema(value) {
     if (schemaConstraints.has(key)) { hints.push(`${key}=${JSON.stringify(val)}`); continue; }
     if (key === 'oneOf' || key === 'anyOf') { alternatives = val; continue; }
     if (key === 'allOf') { intersections = val; continue; }
-    if (key === 'properties') result.properties = Object.fromEntries(Object.entries(val).map(([name, schema]) => [name, geminiSchema(schema)]));
-    else if (key === 'items') result.items = geminiSchema(val);
+    if (key === 'properties') result.properties = Object.fromEntries(Object.entries(val).map(([name, schema]) => [name, geminiSchema(schema, { property: true })]));
+    else if (key === 'items') result.items = geminiSchema(val, { property: true });
     else if (key === 'required') result.required = [...val];
     else if (key === 'description' || key === 'nullable') result[key] = val;
     else if (key === 'enum') {
@@ -129,7 +129,13 @@ export function geminiSchema(value) {
       else hints.push(`enum=${JSON.stringify(val)}`);
     } else if (key === 'const') {
       if (typeof val === 'string') result.enum = [...new Set([...(result.enum ?? []), val])];
-      else hints.push(`const=${JSON.stringify(val)}`);
+      else {
+        // Gemini enums carry strings only; a non-string constant keeps its JSON
+        // type and moves the exact value into the description.
+        if (!result.type) result.type = typeof val === 'boolean' ? 'boolean'
+          : typeof val === 'number' ? (Number.isInteger(val) ? 'integer' : 'number') : undefined;
+        hints.push(`const=${JSON.stringify(val)}`);
+      }
     } else if (key === 'type' && Array.isArray(val)) {
       const types = [...new Set(val.filter(type => type !== 'null'))];
       result.type = preferredType(types);
@@ -141,9 +147,15 @@ export function geminiSchema(value) {
   if (!result.type && result.items) result.type = 'array';
   if (result.type === 'array' && !result.items) result.items = { type: 'string' };
   let projected = result;
-  if (Array.isArray(alternatives) && alternatives.length) projected = mergeSchemas(projected, mergeAlternatives(alternatives.map(geminiSchema)));
-  if (Array.isArray(intersections)) for (const schema of intersections) projected = mergeSchemas(projected, geminiSchema(schema));
+  if (Array.isArray(alternatives) && alternatives.length) projected = mergeSchemas(projected, mergeAlternatives(alternatives.map(item => geminiSchema(item, { property: true }))));
+  if (Array.isArray(intersections)) for (const schema of intersections) projected = mergeSchemas(projected, geminiSchema(schema, { property: true }));
   if (projected.properties && projected.required) projected.required = projected.required.filter(name => name in projected.properties);
+  // A property schema with no type, members or enum is what Protobuf rejects
+  // first; declare the neutral JSON projection instead of sending an empty one.
+  if (options.property && !projected.type && !projected.properties && !projected.items && !projected.enum) {
+    projected = { ...projected, type: 'string' };
+    hints.push('untyped schema projected as string');
+  }
   return appendDescription(projected, hints.length ? `Constraints: ${hints.join('; ')}.` : '');
 }
 

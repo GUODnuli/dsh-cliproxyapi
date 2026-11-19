@@ -7,6 +7,7 @@ import { checkedFetch, readSSE } from './src/http.js';
 import { createNetwork, validateProxy } from './src/network.js';
 import { Images, createImageTool } from './src/images.js';
 import { Quotas } from './src/quota.js';
+import { geminiSchema } from './src/messages.js';
 
 export { Config };
 export const name = 'cpa-subscriptions';
@@ -19,7 +20,7 @@ const HELP = `CPA 订阅账号插件（直接连接上游）
 /cpa models codex — 刷新 Codex 模型
 /cpa models antigravity — 刷新 Antigravity 模型
 /cpa diagnose antigravity — 打印 fetchAvailableModels 原始 Gemini 4 的 disabled / 剩余额度
-/cpa probe antigravity <模型> — 用已保存授权发一次无工具、中立系统提示的极简请求（不重试）
+/cpa probe antigravity <模型> [--system] [--tools] — 发一次极简请求（不重试）；--system 复用本会话 system 文本，--tools 复用本会话工具定义
 /cpa quota codex — 刷新 Codex 模型额度（可改为 antigravity）
 /cpa cancel codex — 取消尚未完成的授权
 /cpa logout codex — 退出对应账号（可改为 antigravity）
@@ -97,7 +98,23 @@ export function apply(ctx, config) {
    * prompt. It isolates the request envelope from the Harness prompt, and it
    * never retries: one invocation is one upstream request.
    */
-  const probeAntigravity = async (model, signal) => {
+  /** Model-visible inputs the calling Session actually sends, for a one-variable probe. */
+  const sessionInputs = agent => {
+    const events = agent?.session?.events ?? [];
+    let system = '', tools = [];
+    for (const event of events) {
+      if (!system && event.type === 'system/message') {
+        system = (event.data?.message?.content ?? []).filter(part => part?.type === 'text').map(part => part.text).join('\n');
+      }
+      if (!tools.length && event.type === 'request/header') {
+        tools = (event.data?.header?.tools ?? []).map(tool => ({ name: tool.name, description: tool.description, parameters: tool.parameters }));
+      }
+      if (system && tools.length) break;
+    }
+    return { system, tools };
+  };
+
+  const probeAntigravity = async (model, signal, { system, tools = [] } = {}) => {
     const account = await accounts.current('antigravity', signal);
     if (!account.projectId) throw new Error('Antigravity 账号缺少项目标识，请重新登录。');
     const provider = accounts.provider('antigravity');
@@ -108,8 +125,10 @@ export function apply(ctx, config) {
       requestType: 'agent',
       request: {
         contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
-        systemInstruction: { parts: [{ text: 'You are a helpful assistant.' }] },
+        systemInstruction: { parts: [{ text: system || 'You are a helpful assistant.' }] },
         generationConfig: { maxOutputTokens: 65536, thinkingConfig: { thinkingLevel: 'HIGH', includeThoughts: true } },
+        ...(tools.length ? { tools: [{ functionDeclarations: tools.map(tool => ({ name: tool.name,
+          description: tool.description, parameters: geminiSchema(tool.parameters) })) }] } : {}),
         sessionId: `probe-${randomUUID()}`,
       },
     };
@@ -157,7 +176,7 @@ export function apply(ctx, config) {
   });
   ctx.commands.register({ name: 'cpa', description: '管理 Codex / Antigravity 订阅账号',
     input: { hint: 'login codex | status | models antigravity | diagnose antigravity | quota codex' }, recordInput: false,
-    async handler({ rawInput, signal }) {
+    async handler({ rawInput, signal, agent }) {
       const [action = 'help', id, ...rest] = rawInput.trim().split(/\s+/).filter(Boolean);
       try {
         if (action === 'help') return { kind: 'success', text: HELP };
@@ -174,10 +193,18 @@ export function apply(ctx, config) {
         if (action === 'probe') {
           if (id !== 'antigravity') throw new Error('probe 目前只支持 antigravity。');
           const model = rest[0];
-          if (!model || rest.length > 1) throw new Error('用法：/cpa probe antigravity <模型 ID>');
+          const flags = new Set(rest.slice(1));
+          if (!model || flags.size !== rest.length - 1) throw new Error('用法：/cpa probe antigravity <模型 ID> [--system] [--tools]');
+          const inputs = sessionInputs(agent);
+          if (flags.has('--system') && !inputs.system) throw new Error('当前会话没有可复用的 system 文本。');
+          if (flags.has('--tools') && !inputs.tools.length) throw new Error('当前会话没有可复用的工具定义。');
+          const shape = `system=${flags.has('--system') ? `${inputs.system.length} 字符` : '中立'}，tools=${flags.has('--tools') ? inputs.tools.length : 0}`;
           try {
-            const result = await probeAntigravity(model, signal);
-            return { kind: 'success', text: `极简请求 HTTP ${result.status}，事件 ${result.events}，首段文本：${result.text || '(空)'}` };
+            const result = await probeAntigravity(model, signal, {
+              system: flags.has('--system') ? inputs.system : undefined,
+              tools: flags.has('--tools') ? inputs.tools : [],
+            });
+            return { kind: 'success', text: `极简请求（${shape}）HTTP ${result.status}，事件 ${result.events}，首段文本：${result.text || '(空)'}` };
           } catch (error) {
             const failure = error?.failure ?? {};
             return { kind: 'error', text: `${error.message}${failure.providerRetryAfterMs ? `（上游建议等待 ${Math.round(failure.providerRetryAfterMs / 1000)} 秒）` : ''}` };

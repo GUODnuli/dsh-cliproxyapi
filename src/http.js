@@ -7,6 +7,13 @@ export function requestHeaders(token, extra = {}) {
 
 const DETAIL_TEXT_LIMIT = 120;
 const detailText = value => typeof value === 'string' && value.length <= DETAIL_TEXT_LIMIT && !/[\r\n]/.test(value) ? value : undefined;
+const providerText = value => {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const cleaned = value.replace(/[\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim()
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+    .replace(/\b(?:ya29\.|sk-|eyJ)[A-Za-z0-9._-]{8,}/g, '[redacted]');
+  return cleaned ? cleaned.slice(0, 500) : undefined;
+};
 const durationMs = value => {
   const match = /^(\d+(?:\.\d+)?)s$/.exec(String(value ?? ''));
   return match ? Math.round(Number(match[1]) * 1000) : undefined;
@@ -27,6 +34,7 @@ export function upstreamFailureDetails(providerError, headers) {
     .find(value => value !== undefined);
   const retryDelayMs = details.map(item => durationMs(item?.retryDelay)).find(value => value !== undefined);
   // BadRequest names the rejected field; keep the identifier, not the prose.
+  const message = providerText(providerError?.message);
   const googleStatus = typeof providerError?.status === 'string' && /^[A-Z][A-Z_]{2,39}$/.test(providerError.status)
     ? providerError.status : undefined;
   const fields = [...new Set(details.flatMap(item => Array.isArray(item?.fieldViolations) ? item.fieldViolations : [])
@@ -41,6 +49,7 @@ export function upstreamFailureDetails(providerError, headers) {
     reasons,
     fields,
     ...(googleStatus === undefined ? {} : { googleStatus }),
+    ...(message === undefined ? {} : { providerMessage: message }),
     ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
     ...(quotaResetDelayMs === undefined ? {} : { quotaResetDelayMs }),
     capacity: reasons.includes('MODEL_CAPACITY_EXHAUSTED'),
@@ -60,6 +69,7 @@ export function describeUpstreamFailure(status, failure) {
   if (status === 401) return '上游返回 HTTP 401。请在 Harness 内重新登录。';
   if (status === 403) return '上游返回 HTTP 403。该授权账号可能没有此资源的权限。';
   if (failure.reasons?.length) return `上游返回 HTTP ${label}。上游原因：${failure.reasons.join(', ')}。`;
+  if (failure.providerMessage !== undefined) return `上游返回 HTTP ${label}。上游说明：${failure.providerMessage}`;
   if (failure.fields?.length) return `上游返回 HTTP ${label}。上游拒绝字段：${failure.fields.join(', ')}。`;
   return `上游返回 HTTP ${label}。`;
 }
