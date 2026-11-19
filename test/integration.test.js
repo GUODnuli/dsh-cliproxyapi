@@ -11,7 +11,7 @@ import CommandRuntime from '@deepseek-ai/dsh-commands';
 import * as web from '../src/web.js';
 import { memoryCredentials, collect, sse } from './helpers.js';
 
-async function testHost(t, credentials = memoryCredentials()) {
+async function testHost(t, credentials = memoryCredentials(), config = {}) {
   const ctx = new Context();
   const home = await mkdtemp(join(tmpdir(), 'cpa-settings-'));
   t.after(async () => { await ctx.fiber.dispose(); await rm(home, { recursive: true, force: true }); });
@@ -31,7 +31,7 @@ async function testHost(t, credentials = memoryCredentials()) {
     },
   });
   await ctx.plugin(SettingsForms);
-  const id = await ctx.loader.create({ id: 'cpa-fixture', name: new URL('../index.js', import.meta.url).href });
+  const id = await ctx.loader.create({ id: 'cpa-fixture', name: new URL('../index.js', import.meta.url).href, config });
   await ctx.loader.await();
   return { ctx, runtime: ctx.loader.resolve(id).fiber };
 }
@@ -81,13 +81,21 @@ test('DSH 0.2.2 loads the plugin, updates volatile settings, streams, and unload
   assert.equal(ctx.get('cpaSubscriptions'), undefined);
 });
 
-test('startup probes stored accounts and batch refresh isolates provider failures', async t => {
+test('startup does not inspect saved accounts unless refresh is enabled', async t => {
+  const credentials = memoryCredentials();
+  let reads = 0;
+  credentials.readRecord = async () => { reads += 1; };
+  const { runtime } = await testHost(t, credentials);
+  assert.equal(runtime.state, 2);
+  assert.equal(reads, 0);
+});
+
+test('opt-in startup probes stored accounts and batch refresh isolates provider failures', async t => {
   const credentials = memoryCredentials();
   let startupReads = 0;
   const readRecord = credentials.readRecord.bind(credentials);
   credentials.readRecord = async key => { startupReads += 1; return readRecord(key); };
-  const { ctx, runtime } = await testHost(t, credentials);
-  await new Promise(resolve => setImmediate(resolve));
+  const { ctx, runtime } = await testHost(t, credentials, { refreshOnStartup: true });
   assert.equal(startupReads, 2, 'startup should inspect both supported account slots');
 
   const service = ctx.cpaSubscriptions;

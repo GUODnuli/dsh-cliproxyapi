@@ -4,10 +4,23 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { tokenPayload } from './accounts.js';
 import { requestHeaders, requestJSON } from './http.js';
 
+const OS_NAMES = { darwin: 'macos', win32: 'windows', linux: 'linux' };
+
+/**
+ * Wire identity for every `cloudcode-pa` v1internal call. The hub client sends
+ * one product token; a harness attribution token beside it would fingerprint a
+ * different client, so this builder owns the whole User-Agent value.
+ */
+export function antigravityUserAgent(config, platform = process.platform, arch = process.arch) {
+  const osType = config.antigravityOsType || OS_NAMES[platform] || platform;
+  const architecture = config.antigravityArch || arch;
+  return `antigravity/hub/${config.antigravityVersion} (aidev_client; os_type=${osType}; arch=${architecture}; cl=${config.antigravityChangelist})`;
+}
+
 export function antigravityHeaders(config, token) {
   const headers = requestHeaders(token);
-  // Keep Harness attribution while retaining the provider's version negotiation token.
-  headers['user-agent'] = `antigravity/${config.antigravityVersion} ${headers['user-agent']}`;
+  delete headers['user-agent'];
+  headers['user-agent'] = antigravityUserAgent(config);
   return headers;
 }
 

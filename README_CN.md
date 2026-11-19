@@ -2,7 +2,11 @@
 
 Codex、Antigravity 直接在 Harness 内使用；无需运行 CLIProxyAPI 服务。此分支以 DSH 0.2.2-rc.5 做离线验证，使用插件条目的可热更新配置保存偏好、模型目录和图片列表；账号仍保存在 Harness 的独立凭据记录中。旧版的三个设置命名空间不自动迁移。如为首次安装，不需要迁移。
 
-## 本次升级 (2.3.5)
+Antigravity 模型刷新使用该账号已授权的项目查询与生成同域的目录，保留上游模型 ID，并区分 Gemini 4 返回数、不可用数与本地收录数。明确标为不可用的条目不能被本地配置开启。对已列出的 Carbon、Argon、Neon 和 Hydrogen 正式型号映射思考档位；Sonar 等其他变体只使用目录明确声明的档位。[Antigravity 套餐权益表](https://antigravity.google/docs/models?hl=en)不等于此接口对当前账号返回的目录。
+
+所有 `v1internal:*` 请求使用 `antigravity/hub/2.32.2 (aidev_client; os_type=…; arch=…; cl=1022991777)` 这一条 User-Agent，不再拼接 Harness 的 `deepseek-harness` 标识。目录按上游返回动态收录，过滤 `-disabled` 占位符、显式 `disabled` 以及 `quotaInfo` 空或 `remainingFraction ≤ 0` 的条目；`gemini-4-hydrogen-sonar` 隐藏并标记为 `[Internal Sonar / Low-Thinking]`。名称由模型 ID 生成，避免上游展示名把 `gemini-2.5-flash` 错标成其他版本。用 `/cpa diagnose antigravity` 可打印最近一次 `fetchAvailableModels` 返回的全部 Gemini 4 key 及其 `disabled`／剩余额度，设置页“诊断”标签的“复制诊断 JSON”也包含同一份数据。插件启动默认不刷新模型或额度；可手动刷新，或在 `cpa-subscriptions` 的配置中显式设置 `refreshOnStartup: true`。
+
+## 上游发布 (2.3.5)
 
 - **强化 Antigravity 工具参数 Schema 兼容性**：深度兼容 Harness 工具复杂 schema（联合类型 `oneOf`/`anyOf`/`allOf`、`const` 以及各类字符串/数字/数组约束），将其投影为 Google Gemini 严格子集结构，将约束平滑转入 description，彻底解决带联合类型/约束的工具声明被拒问题。
 - **打包与依赖优化**：同步版本至 2.3.5。

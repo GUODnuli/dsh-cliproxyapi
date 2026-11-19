@@ -16,6 +16,7 @@ const HELP = `CPA 订阅账号插件（直接连接上游）
 /cpa status — 查看授权状态
 /cpa models codex — 刷新 Codex 模型
 /cpa models antigravity — 刷新 Antigravity 模型
+/cpa diagnose antigravity — 打印 fetchAvailableModels 原始 Gemini 4 的 disabled / 剩余额度
 /cpa quota codex — 刷新 Codex 模型额度（可改为 antigravity）
 /cpa cancel codex — 取消尚未完成的授权
 /cpa logout codex — 退出对应账号（可改为 antigravity）
@@ -65,9 +66,14 @@ export function apply(ctx, config) {
     signal?.throwIfAborted();
     return results;
   };
+  const logCatalog = id => {
+    const report = adapter.diagnostics(id);
+    if (!report) return;
+    ctx.logger?.info('[cpa] %s fetchAvailableModels Gemini 4: %s', id, JSON.stringify(report.gemini4));
+  };
   const logins = new OAuthLogins(accounts, async id => {
     adapter.invalidate(id); quotas.invalidate(id);
-    try { await adapter.discover(id); }
+    try { await adapter.discover(id); logCatalog(id); }
     catch (error) { logins.status.set(id, '已登录；' + error.message); }
   });
   const updatePreferences = async patch => {
@@ -85,7 +91,7 @@ export function apply(ctx, config) {
   };
   const startupRefresh = new AbortController();
   ctx.provide('cpaSubscriptions', { accounts, adapter, quotas, logins, preferences, network, updatePreferences, refreshAll });
-  void refreshAll({ signal: startupRefresh.signal }).catch(() => {
+  if (config.refreshOnStartup) void refreshAll({ signal: startupRefresh.signal }).catch(() => {
     // Individual refresh failures are reflected in quota/catalog status; startup must remain non-blocking.
   });
   ctx.on('dispose', () => {
@@ -109,7 +115,7 @@ export function apply(ctx, config) {
     imageCtx.on('dispose', () => { toolDisposer?.(); });
   });
   ctx.commands.register({ name: 'cpa', description: '管理 Codex / Antigravity 订阅账号',
-    input: { hint: 'login codex | login antigravity | status | models codex | quota codex | logout codex' }, recordInput: false,
+    input: { hint: 'login codex | status | models antigravity | diagnose antigravity | quota codex' }, recordInput: false,
     async handler({ rawInput, signal }) {
       const [action = 'help', id, ...rest] = rawInput.trim().split(/\s+/).filter(Boolean);
       try {
@@ -141,7 +147,15 @@ export function apply(ctx, config) {
         }
         if (action === 'models') {
           const models = await adapter.discover(id, signal);
+          logCatalog(id);
           return { kind: 'success', text: `已刷新 ${models.length} 个模型：\n${models.map(m => m.id).join('\n')}` };
+        }
+        if (action === 'diagnose') {
+          let report = adapter.diagnostics(id);
+          if (!report) { await adapter.discover(id, signal); report = adapter.diagnostics(id); }
+          if (!report) return { kind: 'error', text: '上游没有返回可解析的 Gemini 4 条目；请先完成授权或刷新模型。' };
+          const lines = report.gemini4.map(entry => `${entry.id} | disabled=${entry.disabled} | remaining=${entry.remainingFraction ?? 'n/a'}${entry.internal ? ' | internal' : ''}`);
+          return { kind: 'success', text: `fetchAvailableModels 返回 ${report.total} 个 Gemini 4（${report.fetchedAt}）：\n${lines.join('\n') || '(none)'}` };
         }
         throw new Error('未知操作。输入 /cpa help 查看用法。');
       } catch (error) { return { kind: 'error', text: error.message }; }

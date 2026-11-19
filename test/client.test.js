@@ -57,7 +57,7 @@ test('settings UI exposes batch quota refresh and responsive account overview', 
   assert.match(source, /run\(\{ action: 'quota-all' \}\)/);
   assert.match(source, /'刷新所有额度'/);
   assert.match(source, /className: 'cpa-overview'/);
-  assert.match(source, /启动自动同步已开启/);
+  assert.match(source, /可手动刷新模型和额度/);
   assert.match(source, /className: 'cpa-quota-grid'/);
   assert.match(source, /max-width:\s*640px/);
   assert.match(source, /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);

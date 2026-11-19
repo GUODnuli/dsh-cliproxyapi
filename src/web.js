@@ -15,6 +15,7 @@ export async function statusOf(service) {
       email: account?.email || '', status: service.logins.status.get(id) || (account ? '已登录' : '未登录'),
       pending: service.logins.pending.has(id), loginURL: service.logins.pending.get(id)?.url,
       models: service.adapter.modelEntries(id), catalog: service.adapter.status(id),
+      diagnostics: service.adapter.diagnostics?.(id) ?? null,
       quota: { ...quota, composerRows: composerQuotaRows(id, quota.rows) } });
   }
   return rows;

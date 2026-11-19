@@ -2188,7 +2188,7 @@ window.__ModuleLoader__.load({ id: 'dsh-cliproxyapi', factory: require => {
           ),
           h('span', { className: 'cpa-overview-sync' },
             h('span', { className: 'cpa-dot', 'data-state': 'connected' }),
-            '启动自动同步已开启'
+            '可手动刷新模型和额度'
           )
         ),
         state ? h('div', { className: 'cpa-account-list' },
