@@ -26,30 +26,42 @@ export function upstreamFailureDetails(providerError, headers) {
   const quotaResetDelayMs = details.map(item => durationMs(item?.quotaResetDelay ?? item?.metadata?.quotaResetDelay))
     .find(value => value !== undefined);
   const retryDelayMs = details.map(item => durationMs(item?.retryDelay)).find(value => value !== undefined);
+  // BadRequest names the rejected field; keep the identifier, not the prose.
+  const googleStatus = typeof providerError?.status === 'string' && /^[A-Z][A-Z_]{2,39}$/.test(providerError.status)
+    ? providerError.status : undefined;
+  const fields = [...new Set(details.flatMap(item => Array.isArray(item?.fieldViolations) ? item.fieldViolations : [])
+    .map(violation => typeof violation?.field === 'string' && violation.field.length <= 160 && /^[A-Za-z0-9_.\[\]$-]+$/.test(violation.field)
+      ? violation.field : undefined)
+    .filter(Boolean))];
   const header = headers?.get?.('retry-after');
   const headerMs = header === undefined || header === null ? undefined
     : Number.isFinite(Number(header)) ? Number(header) * 1000 : Date.parse(header) - Date.now();
   const retryAfterMs = [headerMs, retryDelayMs, quotaResetDelayMs].find(value => Number.isFinite(value) && value > 0);
   return {
     reasons,
+    fields,
+    ...(googleStatus === undefined ? {} : { googleStatus }),
     ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
     ...(quotaResetDelayMs === undefined ? {} : { quotaResetDelayMs }),
     capacity: reasons.includes('MODEL_CAPACITY_EXHAUSTED'),
     quota: reasons.includes('QUOTA_EXHAUSTED'),
-    bare: reasons.length === 0 && retryAfterMs === undefined,
+    bare: reasons.length === 0 && fields.length === 0 && retryAfterMs === undefined,
   };
 }
 
 /** Render the reason set without inventing a cause the response did not state. */
 export function describeUpstreamFailure(status, failure) {
-  const reasons = failure.reasons.join(', ');
-  if (status === 429 && failure.quota) return `上游返回 HTTP 429。上游报告配额耗尽（${reasons}）。`;
-  if (status === 429 && failure.capacity) return `上游返回 HTTP 429。上游报告模型容量暂时耗尽（${reasons}），不是账号额度结论。`;
-  if (status === 429 && reasons) return `上游返回 HTTP 429。上游原因：${reasons}。`;
-  if (status === 429) return '上游返回 HTTP 429。该响应未提供 Retry-After 或 error.details，不能据此判断是否额度耗尽。';
+  const reasons = (failure.reasons ?? []).join(', ');
+  const label = failure.googleStatus === undefined ? `${status}` : `${status}（${failure.googleStatus}）`;
+  if (status === 429 && failure.quota) return `上游返回 HTTP ${label}。上游报告配额耗尽（${reasons}）。`;
+  if (status === 429 && failure.capacity) return `上游返回 HTTP ${label}。上游报告模型容量暂时耗尽（${reasons}），不是账号额度结论。`;
+  if (status === 429 && reasons) return `上游返回 HTTP ${label}。上游原因：${reasons}。`;
+  if (status === 429) return `上游返回 HTTP ${label}。该响应未提供 Retry-After 或 error.details，不能据此判断是否额度耗尽。`;
   if (status === 401) return '上游返回 HTTP 401。请在 Harness 内重新登录。';
   if (status === 403) return '上游返回 HTTP 403。该授权账号可能没有此资源的权限。';
-  return `上游返回 HTTP ${status}。`;
+  if (failure.reasons?.length) return `上游返回 HTTP ${label}。上游原因：${failure.reasons.join(', ')}。`;
+  if (failure.fields?.length) return `上游返回 HTTP ${label}。上游拒绝字段：${failure.fields.join(', ')}。`;
+  return `上游返回 HTTP ${label}。`;
 }
 
 export async function checkedFetch(fetcher, url, init, options = {}) {

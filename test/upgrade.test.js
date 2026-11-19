@@ -219,6 +219,32 @@ test('429 responses keep the provider reason codes and delays instead of one fix
   assert.match(bare.message, /未提供 Retry-After 或 error\.details/);
 });
 
+test('a 400 names the rejected request field instead of a bare sentence', async () => {
+  const error = await checkedFetch(async () => new Response(JSON.stringify({ error: { code: 400,
+    details: [{ '@type': 'type.googleapis.com/google.rpc.BadRequest',
+      fieldViolations: [{ field: 'request.contents[0].parts[0].text', description: 'not copied' }] }] } }),
+  { status: 400, headers: { 'content-type': 'application/json' } }), 'https://example.test', {})
+    .then(() => assert.fail('expected a rejection'), failure => failure);
+  assert.equal(error.code, 'INVALID_REQUEST');
+  assert.match(error.message, /request\.contents\[0\]\.parts\[0\]\.text/);
+  assert.doesNotMatch(error.message, /not copied/);
+});
+
+test('a 400 without details still reports the status instead of crashing', async () => {
+  const error = await checkedFetch(async () => new Response(JSON.stringify({ error: { code: 400 } }),
+    { status: 400, headers: { 'content-type': 'application/json' } }), 'https://example.test', {})
+    .then(() => assert.fail('expected a rejection'), failure => failure);
+  assert.equal(error.code, 'INVALID_REQUEST');
+  assert.equal(error.message, '上游返回 HTTP 400。');
+});
+
+test('a bare 400 still names the provider status code', async () => {
+  const error = await checkedFetch(async () => new Response(JSON.stringify({ error: { code: 400, status: 'INVALID_ARGUMENT' } }),
+    { status: 400, headers: { 'content-type': 'application/json' } }), 'https://example.test', {})
+    .then(() => assert.fail('expected a rejection'), failure => failure);
+  assert.equal(error.message, '上游返回 HTTP 400（INVALID_ARGUMENT）。');
+});
+
 test('rate limits are not retried on a fixed backoff', () => {
   const adapter = new SubscriptionAdapter(new Accounts(memoryCredentials(), Config({}), async () => json({})),
     { get: () => ({ codex: [], antigravity: [] }) });
