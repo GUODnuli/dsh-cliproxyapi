@@ -80,9 +80,13 @@ test('consumer Gemini generation uses daily, while project discovery stays on pr
 });
 
 test('image recognition projects real attachment bytes in both provider protocols without modifying history', async () => {
-  const ref={attachmentId:'sha256:test'}, original={messages:[message('user',[{type:'image',attachment:ref}])]};
-  const attachments={readImageRequest:async()=>({data:new Uint8Array([1,2,3]),mediaType:'image/png',width:10,height:12})};
-  const prepared=await projectImages(original,attachments,true,Config({}));
+  const ref={attachmentId:'sha256:test',width:4000,height:3000}, original={messages:[message('user',[{type:'image',attachment:ref}])]};
+  const config=Config({imagePixelBudget:3000000});
+  const attachments={readImageRequest:async(_ref,target)=>{
+    assert.deepEqual(target, {width:2000,height:1500,maxBytes:config.imageByteTarget});
+    return {data:new Uint8Array([1,2,3]),mediaType:'image/png',width:2000,height:1500};
+  }};
+  const prepared=await projectImages(original,attachments,true,config);
   assert.equal(codexRequest(prepared).input[0].content[1].image_url,'data:image/png;base64,AQID');
   assert.equal(antigravityRequest(prepared,'p').request.contents[0].parts[1].inlineData.data,'AQID');
   assert.equal(original.imagePayloads,undefined);

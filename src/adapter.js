@@ -3,7 +3,7 @@ import { LlmAdapter, LlmError, resolveRetryPolicy } from '@deepseek-ai/dsh-llm';
 import { PROVIDERS, providerOf } from './config.js';
 import { checkedFetch, requestHeaders } from './http.js';
 import { antigravityHeaders } from './oauth.js';
-import { codexRequest, antigravityRequest, projectImages } from './messages.js';
+import { codexRequest, antigravityRequest, imageRequestTarget, projectImages } from './messages.js';
 import { codexStream, antigravityStream } from './streams.js';
 import { modelSettings, validateModelPatch, PreferencesSchema, normalizeModels } from './catalog.js';
 export { INITIAL_MODELS, normalizeModels } from './catalog.js';
@@ -33,6 +33,7 @@ export class SubscriptionAdapter extends LlmAdapter {
     return id;
   }
   providerInfo(route) { return { id: route, name: PROVIDERS[this.idOf(route)].label }; }
+  imageRequestTarget(_provider, _model, ref) { return imageRequestTarget(ref, this.accounts.config); }
   providerRetryPolicy() { return resolveRetryPolicy({ mode: 'normal', maxRetries: 2,
     retryableCodes: ['NETWORK', 'SERVER', 'RATE_LIMIT'] }, 'cpa-subscriptions'); }
   modelEntries(id) { return this.catalog.get()[id].map(model => modelSettings(model, this.preferences.get(), id)); }

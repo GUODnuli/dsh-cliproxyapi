@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { LlmError } from '@deepseek-ai/dsh-llm';
+import { requestImageDimensions } from '@deepseek-ai/dsh-attachment';
+import { LlmError, offloadedImageText, projectOffloadedImages } from '@deepseek-ai/dsh-llm';
 
 export const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const textOf = blocks => blocks.filter(b => b.type === 'text').map(b => b.text).join('\n');
@@ -198,8 +199,15 @@ function geminiImageParts(block, options) {
   return [{ text: image.description }, { inlineData: { mimeType: image.mediaType, data: image.base64 } }];
 }
 
+/** Resolve the same request dimensions for preflight, token metering and serialization. */
+export function imageRequestTarget(ref, config) {
+  return { ...requestImageDimensions(ref.width, ref.height, config.imagePixelBudget), maxBytes: config.imageByteTarget };
+}
+
 /** Resolve verified Harness attachments into per-request bytes, never mutate durable messages. */
 export async function projectImages(options, attachments, vision, config) {
+  const messages = projectOffloadedImages(options.messages, offloadedImageText);
+  if (messages !== options.messages) options = { ...options, messages };
   const images = [];
   const visit = blocks => { for (const block of blocks) {
     if (block.type === 'image') images.push(block.attachment);
@@ -214,7 +222,7 @@ export async function projectImages(options, attachments, vision, config) {
     options.signal?.throwIfAborted();
     if (!ref?.attachmentId) throw new LlmError('图片附件引用无效。', 'INVALID_REQUEST');
     if (!imagePayloads.has(ref.attachmentId)) {
-      const image = await attachments.readImageRequest(ref, { maxPixels: config.imagePixelBudget ?? 4194304, maxBytes: config.imageByteTarget ?? 1048576 }, options.signal);
+      const image = await attachments.readImageRequest(ref, imageRequestTarget(ref, config), options.signal);
       const base64 = Buffer.from(image.data).toString('base64');
       imagePayloads.set(ref.attachmentId, { mediaType: image.mediaType, base64, url: `data:${image.mediaType};base64,${base64}`,
         description: `Image attachment ${ref.attachmentId}; request image ${image.width}x${image.height} pixels.`, bytes: base64.length });

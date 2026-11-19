@@ -1,6 +1,6 @@
-# DeepSeek Harness 订阅账号插件 2.3.5
+# DeepSeek Harness 订阅账号插件 · DSH 0.2.2 适配版
 
-Codex、Antigravity 直接在 Harness 内使用；无需运行 CLIProxyAPI 服务。
+Codex、Antigravity 直接在 Harness 内使用；无需运行 CLIProxyAPI 服务。此分支以 DSH 0.2.2-rc.5 做离线验证，使用插件条目的可热更新配置保存偏好、模型目录和图片列表；账号仍保存在 Harness 的独立凭据记录中。旧版的三个设置命名空间不自动迁移。如为首次安装，不需要迁移。
 
 ## 本次升级 (2.3.5)
 

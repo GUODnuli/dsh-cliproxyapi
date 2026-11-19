@@ -1,6 +1,6 @@
 {
   "name": "dsh-cliproxyapi",
-  "version": "2.3.5",
+  "version": "2.3.6-dsh.0",
   "description": "Native Codex and Antigravity subscription accounts inside DeepSeek Harness, based on CLIProxyAPI",
   "repository": {
     "type": "git",
@@ -23,15 +23,17 @@
     "bundle": { "patch": "./cordis.patch.yml" },
     "client": { "inject": ["@deepseek-ai/dsh-api-remotes", "@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-model-selection", "@deepseek-ai/dsh-client-ui-settings"], "platform": "web" }
   },
-  "engines": { "node": ">=22.19.0" },
+  "engines": { "node": ">=24.9.0", "dsh": ">=0.2.2-rc.5 <0.2.3-0" },
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/dsh-llm": "^0.1.5-rc.1",
-    "@deepseek-ai/dsh-credentials": "^0.1.5-rc.1",
-    "@deepseek-ai/schemastery": "^3.18.0",
-    "@deepseek-ai/dsh-tools": "^0.1.5-rc.1"
+    "@deepseek-ai/dsh-attachment": ">=0.2.2-rc.5 <0.2.3-0",
+    "@deepseek-ai/dsh-llm": ">=0.2.2-rc.5 <0.2.3-0",
+    "@deepseek-ai/dsh-credentials": ">=0.2.2-rc.5 <0.2.3-0",
+    "@deepseek-ai/schemastery": "^3.19.0",
+    "@deepseek-ai/dsh-tools": ">=0.2.2-rc.5 <0.2.3-0"
   },
   "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-attachment": { "optional": true },
     "@deepseek-ai/dsh-llm": { "optional": true },
     "@deepseek-ai/dsh-credentials": { "optional": true },
     "@deepseek-ai/schemastery": { "optional": true },
@@ -44,7 +46,16 @@
     "pack:plugin": "npm pack --ignore-scripts"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh": "0.1.5-rc.1",
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/cordis-plugin-group": "1.1.0",
+    "@deepseek-ai/cordis-plugin-loader": "1.1.0",
+    "@deepseek-ai/dsh-attachment": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-commands": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-credentials": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-settings": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.5",
+    "@deepseek-ai/schemastery": "3.19.0",
     "pnpm": "11.7.0"
   }
 }

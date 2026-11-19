@@ -1,22 +1,43 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Context } from '@deepseek-ai/cordis';
+import Loader from '@deepseek-ai/cordis-plugin-loader';
+import SettingsForms from '@deepseek-ai/dsh-settings';
 import LlmRuntime, { createUserMessage } from '@deepseek-ai/dsh-llm';
 import CommandRuntime from '@deepseek-ai/dsh-commands';
-import * as plugin from '../index.js';
 import * as web from '../src/web.js';
 import { memoryCredentials, collect, sse } from './helpers.js';
 
-test('real Cordis loads the plugin, registers native models/commands, streams, and unloads cleanly', async t => {
+async function testHost(t, credentials = memoryCredentials()) {
   const ctx = new Context();
-  t.after(() => ctx.fiber.dispose());
-  await ctx.plugin(LlmRuntime); await ctx.plugin(CommandRuntime);
-  ctx.provide('credentials', memoryCredentials());
-  ctx.provide('settings', { register(_ns, schema) {
-    let state = schema({});
-    return { get: () => state, update: async patch => { state = schema({ ...state, ...patch }); } };
-  } });
-  const runtime = await ctx.plugin(plugin, {});
+  const home = await mkdtemp(join(tmpdir(), 'cpa-settings-'));
+  t.after(async () => { await ctx.fiber.dispose(); await rm(home, { recursive: true, force: true }); });
+  await ctx.plugin(Loader);
+  await ctx.plugin(LlmRuntime);
+  await ctx.plugin(CommandRuntime);
+  ctx.provide('credentials', credentials);
+  ctx.provide('profileContext', { home });
+  ctx.provide('configEditor', {
+    entries: () => [...ctx.loader.entries()],
+    configuration() {
+      return this.entries().map(entry => ({ entry, inherited: {}, override: entry.options.config ?? {} }));
+    },
+    async edit(entry, change) {
+      const config = change(entry.options.config ?? {}, {});
+      await ctx.loader.update(entry.options.id, { config });
+    },
+  });
+  await ctx.plugin(SettingsForms);
+  const id = await ctx.loader.create({ id: 'cpa-fixture', name: new URL('../index.js', import.meta.url).href });
+  await ctx.loader.await();
+  return { ctx, runtime: ctx.loader.resolve(id).fiber };
+}
+
+test('DSH 0.2.2 loads the plugin, updates volatile settings, streams, and unloads cleanly', async t => {
+  const { ctx, runtime } = await testHost(t);
   assert.equal(runtime.state, 2);
   assert.deepEqual(ctx.llm.listProviders().map(p => p.id).sort(), ['cpa-antigravity', 'cpa-codex']);
   const command = ctx.commands.find({}, 'cpa');
@@ -24,6 +45,12 @@ test('real Cordis loads the plugin, registers native models/commands, streams, a
   const result = await command.handler({ rawInput: ' status', signal: new AbortController().signal });
   assert.match(result.text, /未登录/);
   const service = ctx.cpaSubscriptions;
+  assert.equal(ctx.settings.describe().find(row => row.ns === 'cpa-fixture').autoGenerate, false);
+  await service.updatePreferences({ network: { mode: 'direct' } });
+  assert.equal(ctx.cpaSubscriptions, service, 'settings updates do not remount CPA');
+  assert.equal(service.preferences.get().network.mode, 'direct');
+  await service.adapter.updateModel('codex', 'gpt-5.4', { reasoningEffort: 'high' });
+  assert.equal(service.adapter.modelEntries('codex')[0].reasoningEffort, 'high');
   await service.accounts.save('codex', { accessToken: 'test', accountId: 'a', expiresAt: Date.now() + 3600000 });
   service.accounts.fetcher = async () => new Response(JSON.stringify({
     rate_limit: { primary_window: { used_percent: 25, limit_window_seconds: 18000 } },
@@ -36,6 +63,18 @@ test('real Cordis loads the plugin, registers native models/commands, streams, a
     messages: [createUserMessage({ content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } })] }));
   assert.equal(chunks.at(-1).reason.kind, 'stop');
   assert.equal(chunks.find(c => c.type === 'block-end').block.text, 'native runtime works');
+  await service.accounts.save('antigravity', { accessToken: 'fixture', projectId: 'test-project', expiresAt: Date.now() + 3600000 });
+  service.accounts.fetcher = async (url, init) => {
+    assert.equal(new URL(url).hostname, 'daily-cloudcode-pa.googleapis.com');
+    const { model, request } = JSON.parse(init.body);
+    assert.equal(model, 'gemini-3.8-flash');
+    assert.equal(request.contents[0].parts[0].text, 'hello');
+    return sse([{ response: { candidates: [{ content: { parts: [{ text: 'fixture Gemini response' }] }, finishReason: 'STOP' }] } }]);
+  };
+  const gemini = await collect(ctx.llm.stream({ provider: 'cpa-antigravity', model: 'gemini-3.8-flash',
+    messages: [createUserMessage({ content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } })] }));
+  assert.equal(gemini.at(-1).reason.kind, 'stop');
+  assert.equal(gemini.find(c => c.type === 'block-end').block.text, 'fixture Gemini response');
   await runtime.dispose();
   assert.equal(ctx.llm.listProviders().length, 0);
   assert.equal(ctx.commands.find({}, 'cpa'), undefined);
@@ -43,19 +82,11 @@ test('real Cordis loads the plugin, registers native models/commands, streams, a
 });
 
 test('startup probes stored accounts and batch refresh isolates provider failures', async t => {
-  const ctx = new Context();
-  t.after(() => ctx.fiber.dispose());
-  await ctx.plugin(LlmRuntime); await ctx.plugin(CommandRuntime);
   const credentials = memoryCredentials();
   let startupReads = 0;
   const readRecord = credentials.readRecord.bind(credentials);
   credentials.readRecord = async key => { startupReads += 1; return readRecord(key); };
-  ctx.provide('credentials', credentials);
-  ctx.provide('settings', { register(_ns, schema) {
-    let state = schema({});
-    return { get: () => state, update: async patch => { state = schema({ ...state, ...patch }); } };
-  } });
-  const runtime = await ctx.plugin(plugin, {});
+  const { ctx, runtime } = await testHost(t, credentials);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(startupReads, 2, 'startup should inspect both supported account slots');
 

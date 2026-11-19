@@ -1,4 +1,5 @@
 import Schema from '@deepseek-ai/schemastery';
+import { CatalogSchema, PreferencesSchema } from './catalog.js';
 
 export const Config = Schema.object({
   codexCallbackPort: Schema.number().min(1).max(65535).step(1).default(1455),
@@ -13,6 +14,9 @@ export const Config = Schema.object({
   maxRequestImageBytes: Schema.number().min(1024).default(20971520),
   imagePixelBudget: Schema.number().min(1).default(4194304),
   imageByteTarget: Schema.number().min(1024).default(1048576),
+  preferences: PreferencesSchema.default({}).volatile(),
+  catalog: CatalogSchema.default({}).volatile(),
+  gallery: Schema.object({ entries: Schema.array(Schema.any()).default([]) }).default({}).volatile(),
 });
 
 export const PROVIDERS = Object.freeze({

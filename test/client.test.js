@@ -37,7 +37,7 @@ function memoryStorage() {
 }
 
 const group = {
-  id: 'provider-a',
+  id: 'cpa-antigravity',
   models: [
     { id: 'reasoning-a', reasoning: { efforts: [{ id: 'low' }, { id: 'high' }], defaultEffort: 'low' } },
     { id: 'plain-b' },
@@ -65,7 +65,7 @@ test('settings UI exposes batch quota refresh and responsive account overview', 
   assert.match(source, /@container \(width <= 520px\)[\s\S]*\.cpa-quota-grid \{ grid-template-columns: 1fr; \}/);
   assert.match(source, /\.cpa-account-actions\s*\{/);
   assert.match(source, /'aria-selected': tab === 'models'/);
-  assert.match(source, /'2\.3\.4'/);
+  assert.match(source, /'DSH 0\.2\.2'/);
   assert.match(source, /重新读取插件当前缓存状态，不请求上游接口/);
   assert.match(source, /label: \(\) => '订阅账号'/);
   assert.doesNotMatch(source, /label: \(\) => '订阅账号 \(CPA\)'/);
@@ -74,16 +74,16 @@ test('settings UI exposes batch quota refresh and responsive account overview', 
 test('client remembers an explicit reasoning effort per model and restores it after switching back', async () => {
   const localStorage = memoryStorage();
   const { installEffortMemory } = await loadClient(localStorage);
-  let state = { current: { provider: 'provider-a', model: 'reasoning-a', reasoningEffort: 'low' }, groups: [group] };
+  let state = { current: { provider: 'cpa-antigravity', model: 'reasoning-a', reasoningEffort: 'low' }, groups: [group] };
   const calls = [];
   const prototype = { async select(selection) { calls.push({ ...selection }); state = { ...state, current: selection }; } };
   const controller = Object.create(prototype);
   controller.store = { getSnapshot: () => state };
   const dispose = installEffortMemory(controller);
 
-  await controller.select({ provider: 'provider-a', model: 'reasoning-a', reasoningEffort: 'high' });
-  await controller.select({ provider: 'provider-a', model: 'plain-b' });
-  await controller.select({ provider: 'provider-a', model: 'reasoning-a', reasoningEffort: 'low' });
+  await controller.select({ provider: 'cpa-antigravity', model: 'reasoning-a', reasoningEffort: 'high' });
+  await controller.select({ provider: 'cpa-antigravity', model: 'plain-b' });
+  await controller.select({ provider: 'cpa-antigravity', model: 'reasoning-a', reasoningEffort: 'low' });
 
   assert.equal(calls[0].reasoningEffort, 'high');
   assert.equal(calls[1].reasoningEffort, undefined);
@@ -95,7 +95,7 @@ test('client remembers an explicit reasoning effort per model and restores it af
 test('client remembers provider-default effort and ignores models without effort tiers', async () => {
   const localStorage = memoryStorage();
   const { installEffortMemory } = await loadClient(localStorage);
-  let state = { current: { provider: 'provider-a', model: 'reasoning-a', reasoningEffort: 'high' }, groups: [group] };
+  let state = { current: { provider: 'cpa-antigravity', model: 'reasoning-a', reasoningEffort: 'high' }, groups: [group] };
   const calls = [];
   const controller = {
     store: { getSnapshot: () => state },
@@ -104,9 +104,9 @@ test('client remembers provider-default effort and ignores models without effort
   const original = controller.select;
   const dispose = installEffortMemory(controller);
 
-  await controller.select({ provider: 'provider-a', model: 'reasoning-a' });
-  await controller.select({ provider: 'provider-a', model: 'plain-b', reasoningEffort: 'forged' });
-  await controller.select({ provider: 'provider-a', model: 'reasoning-a', reasoningEffort: 'low' });
+  await controller.select({ provider: 'cpa-antigravity', model: 'reasoning-a' });
+  await controller.select({ provider: 'cpa-antigravity', model: 'plain-b', reasoningEffort: 'forged' });
+  await controller.select({ provider: 'cpa-antigravity', model: 'reasoning-a', reasoningEffort: 'low' });
 
   assert.equal(calls[0].reasoningEffort, undefined);
   assert.equal(calls[1].reasoningEffort, 'forged');

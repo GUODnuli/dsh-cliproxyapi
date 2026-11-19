@@ -22,10 +22,9 @@ Native Codex and Antigravity subscription accounts inside DeepSeek Harness, base
 
 ### 方式一：在 DeepSeek Harness 设置页中安装（推荐）
 
-1. 下载 [Releases](https://github.com/new-Beginner/dsh-cliproxyapi/releases) 中的 `dsh-cliproxyapi-2.3.5.tgz`。
-2. 打开 DeepSeek Harness -> 设置 -> 插件管理。
-3. 选择“从本地包安装”，选取下载的 `.tgz` 文件。
-4. 重启 DeepSeek Harness 即可生效。
+1. 此分支适用于 DSH 0.2.2，离线验证版本为 0.2.2-rc.5。运行 `npm run pack:plugin` 生成 `dsh-cliproxyapi-2.3.6-dsh.0.tgz`。
+2. 打开 DeepSeek Harness → 设置 → 插件管理，选择“从本地包安装”，选取该 `.tgz` 文件。
+3. 若安装时保持停用，准备授权时再启用。它注册独立的 `cpa-codex` 和 `cpa-antigravity` 路由，不替换已有供应商或导入其 OAuth 凭据。授权及模型可用性仍由上游决定。
 
 ### 方式二：命令行安装 (CLI)
 

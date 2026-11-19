@@ -1055,8 +1055,8 @@ window.__ModuleLoader__.load({ id: 'dsh-cliproxyapi', factory: require => {
       credentials: 'same-origin', signal,
       ...(body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {})
     });
-    const value = await response.json();
-    if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
+    const value = response.headers.get('content-type')?.includes('application/json') ? await response.json() : null;
+    if (!response.ok || value === null) throw new Error(value?.error || `HTTP ${response.status}`);
     return value;
   }
 
@@ -1122,6 +1122,7 @@ window.__ModuleLoader__.load({ id: 'dsh-cliproxyapi', factory: require => {
     const previous = controller.select;
     const entry = { count: 1, previous, owned, wrapped: null };
     entry.wrapped = async selection => {
+      if (!Object.hasOwn(CPA_ROUTES, selection.provider)) return previous.call(controller, selection);
       const state = controller.store.getSnapshot();
       const model = modelChoice(state, selection);
       const efforts = Array.isArray(model?.reasoning?.efforts) ? model.reasoning.efforts.map(item => item.id) : [];
@@ -1145,7 +1146,7 @@ window.__ModuleLoader__.load({ id: 'dsh-cliproxyapi', factory: require => {
         }
       }
       const result = await previous.call(controller, next);
-      if (!switching) writeRememberedEffort(selection.provider, selection.model, next.reasoningEffort);
+      if (!switching && result?.ok !== false) writeRememberedEffort(selection.provider, selection.model, next.reasoningEffort);
       return result;
     };
     controller.select = entry.wrapped;
@@ -2084,7 +2085,7 @@ window.__ModuleLoader__.load({ id: 'dsh-cliproxyapi', factory: require => {
         h('div', { className: 'cpa-title-group' },
           h('h2', { className: 'cpa-title' },
             'CLIProxyAPI 订阅服务',
-            h('span', { className: 'cpa-badge cpa-badge-brand' }, '2.3.4')
+            h('span', { className: 'cpa-badge cpa-badge-brand' }, 'DSH 0.2.2')
           ),
           h('p', { className: 'cpa-subtitle' },
             '管理订阅账号、模型能力与实时额度'
@@ -2329,8 +2330,7 @@ window.__ModuleLoader__.load({ id: 'dsh-cliproxyapi', factory: require => {
           }
         }, ComposerQuota));
       };
-      if (ctx.get('remote.session') === undefined) installComposer(ctx);
-      else ctx.inject(['remote.session'], installComposer);
+      ctx.inject(['sessions'], installComposer);
     }
   };
 }});

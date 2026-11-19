@@ -2,9 +2,8 @@ import { Accounts } from './src/accounts.js';
 import { Config, PROVIDERS, providerOf } from './src/config.js';
 import { OAuthLogins } from './src/oauth.js';
 import { SubscriptionAdapter } from './src/adapter.js';
-import { CatalogSchema, PreferencesSchema } from './src/catalog.js';
 import { createNetwork, validateProxy } from './src/network.js';
-import { GallerySchema, Images, createImageTool } from './src/images.js';
+import { Images, createImageTool } from './src/images.js';
 import { Quotas } from './src/quota.js';
 
 export { Config };
@@ -24,10 +23,16 @@ const HELP = `CPA 订阅账号插件（直接连接上游）
 首次使用每个渠道只有引导模型；刷新后以账号实际返回的列表为准。`;
 
 export function apply(ctx, config) {
-  const preferences = ctx.settings.register('cpa-preferences', PreferencesSchema);
+  const entryId = ctx.fiber.entry?.options.id ?? name;
+  ctx.effect(() => ctx.settings.configure({ auto: false }, ctx.fiber));
+  const settings = key => ({
+    get: () => config[key].get(),
+    update: patch => ctx.settings.update(entryId, { [key]: patch }),
+  });
+  const preferences = settings('preferences');
   const network = createNetwork(() => preferences.get().network);
   const accounts = new Accounts(ctx.credentials, config, network.fetch);
-  const catalog = ctx.settings.register('cpa-models', CatalogSchema);
+  const catalog = settings('catalog');
   let registration;
   const adapter = new SubscriptionAdapter(accounts, catalog, () => registration.replace(Object.values(PROVIDERS).map(p => p.route)), preferences, () => ctx.get('attachments'));
   registration = ctx.llm.registerAdapter(Object.values(PROVIDERS).map(p => p.route), adapter);
@@ -88,7 +93,7 @@ export function apply(ctx, config) {
     logins.dispose(); adapter.dispose(); quotas.dispose(); accounts.dispose();
   });
   ctx.inject(['tools', 'attachments'], imageCtx => {
-    const gallery = imageCtx.settings.register('cpa-images', GallerySchema);
+    const gallery = settings('gallery');
     const images = new Images(accounts, adapter, imageCtx.attachments, preferences, gallery);
     imageCtx.provide('cpaImages', images);
     let toolDisposer;
@@ -98,8 +103,10 @@ export function apply(ctx, config) {
       else if (!preferences.get().images.enabled && toolDisposer) { toolDisposer(); toolDisposer = undefined; }
     };
     syncTool();
-    const unwatch = preferences.watch(syncTool);
-    imageCtx.on('dispose', () => { unwatch(); toolDisposer?.(); });
+    imageCtx.effect(() => ctx.on('loader/volatile-update', paths => {
+      if (paths.some(([key]) => key === 'preferences')) syncTool();
+    }));
+    imageCtx.on('dispose', () => { toolDisposer?.(); });
   });
   ctx.commands.register({ name: 'cpa', description: '管理 Codex / Antigravity 订阅账号',
     input: { hint: 'login codex | login antigravity | status | models codex | quota codex | logout codex' }, recordInput: false,

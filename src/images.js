@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import Schema from '@deepseek-ai/schemastery';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { checkedFetch } from './http.js';
@@ -12,7 +11,6 @@ const imageRefSpec = { type: 'object', additionalProperties: false, properties: 
   bytes: { type: 'integer', required: true }, width: { type: 'integer', required: true }, height: { type: 'integer', required: true },
   name: { type: 'string' }, originalDimensions: { type: 'object', additionalProperties: false, properties: { width: { type: 'integer' }, height: { type: 'integer' } } },
 } };
-export const GallerySchema = Schema.object({ entries: Schema.array(Schema.any()).default([]) });
 
 export async function readBoundedJSON(response, maxBytes, signal) {
   const reader = response.body?.getReader();
