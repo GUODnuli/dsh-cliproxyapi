@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { LlmError } from '@deepseek-ai/dsh-llm';
 import { digest } from './messages.js';
-import { readSSE } from './http.js';
+import { readSSE, upstreamFailureDetails } from './http.js';
 
 class Blocks {
   constructor() { this.entries = []; this.keys = new Map(); }
@@ -95,7 +95,13 @@ export async function* antigravityStream(response, signal) {
   let usage, finish, activeType, activeKey, serial = 0;
   for await (const envelope of readSSE(response, signal)) {
     const event = envelope.response || envelope;
-    if (event.error) throw new LlmError('Antigravity 返回了流式错误。', 'SERVER');
+    if (event.error) {
+      const failure = upstreamFailureDetails(event.error);
+      // A mid-stream refusal keeps the provider's own reason codes; inventing a
+      // generic failure would hide whether it was capacity or quota.
+      throw new LlmError(failure.reasons.length ? `Antigravity 流式错误：${failure.reasons.join(', ')}。`
+        : 'Antigravity 返回了流式错误（未提供 error.details）。', failure.quota ? 'QUOTA' : 'SERVER');
+    }
     if (event.usageMetadata) usage = event.usageMetadata;
     const candidate = event.candidates?.[0];
     for (const part of candidate?.content?.parts || []) {

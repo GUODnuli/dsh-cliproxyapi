@@ -5,6 +5,53 @@ export function requestHeaders(token, extra = {}) {
     ...attributionHeaders(), ...extra, ...(token ? { authorization: `Bearer ${token}` } : {}) };
 }
 
+const DETAIL_TEXT_LIMIT = 120;
+const detailText = value => typeof value === 'string' && value.length <= DETAIL_TEXT_LIMIT && !/[\r\n]/.test(value) ? value : undefined;
+const durationMs = value => {
+  const match = /^(\d+(?:\.\d+)?)s$/.exec(String(value ?? ''));
+  return match ? Math.round(Number(match[1]) * 1000) : undefined;
+};
+
+/**
+ * Turn one upstream error body into the small, safe fact set a caller may act
+ * on: reason codes, quota signals and delays. Free-form text is not copied, so
+ * a provider message cannot carry request content into a session or a log.
+ * @param providerError - parsed `error` object from the response body.
+ * @param headers - response headers, when the failure arrived with a status.
+ * @returns reasons, retry delay, and whether the body said anything at all.
+ */
+export function upstreamFailureDetails(providerError, headers) {
+  const details = Array.isArray(providerError?.details) ? providerError.details : [];
+  const reasons = [...new Set(details.map(item => detailText(item?.reason)).filter(Boolean))];
+  const quotaResetDelayMs = details.map(item => durationMs(item?.quotaResetDelay ?? item?.metadata?.quotaResetDelay))
+    .find(value => value !== undefined);
+  const retryDelayMs = details.map(item => durationMs(item?.retryDelay)).find(value => value !== undefined);
+  const header = headers?.get?.('retry-after');
+  const headerMs = header === undefined || header === null ? undefined
+    : Number.isFinite(Number(header)) ? Number(header) * 1000 : Date.parse(header) - Date.now();
+  const retryAfterMs = [headerMs, retryDelayMs, quotaResetDelayMs].find(value => Number.isFinite(value) && value > 0);
+  return {
+    reasons,
+    ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+    ...(quotaResetDelayMs === undefined ? {} : { quotaResetDelayMs }),
+    capacity: reasons.includes('MODEL_CAPACITY_EXHAUSTED'),
+    quota: reasons.includes('QUOTA_EXHAUSTED'),
+    bare: reasons.length === 0 && retryAfterMs === undefined,
+  };
+}
+
+/** Render the reason set without inventing a cause the response did not state. */
+export function describeUpstreamFailure(status, failure) {
+  const reasons = failure.reasons.join(', ');
+  if (status === 429 && failure.quota) return `上游返回 HTTP 429。上游报告配额耗尽（${reasons}）。`;
+  if (status === 429 && failure.capacity) return `上游返回 HTTP 429。上游报告模型容量暂时耗尽（${reasons}），不是账号额度结论。`;
+  if (status === 429 && reasons) return `上游返回 HTTP 429。上游原因：${reasons}。`;
+  if (status === 429) return '上游返回 HTTP 429。该响应未提供 Retry-After 或 error.details，不能据此判断是否额度耗尽。';
+  if (status === 401) return '上游返回 HTTP 401。请在 Harness 内重新登录。';
+  if (status === 403) return '上游返回 HTTP 403。该授权账号可能没有此资源的权限。';
+  return `上游返回 HTTP ${status}。`;
+}
+
 export async function checkedFetch(fetcher, url, init, options = {}) {
   let response;
   try { response = await fetcher(url, { ...init, redirect: 'error' }); }
@@ -27,19 +74,15 @@ export async function checkedFetch(fetcher, url, init, options = {}) {
         if (total <= 65536) providerError = JSON.parse(Buffer.concat(chunks).toString()).error ?? {};
       } catch {} finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
     }
-    const reasons = (Array.isArray(providerError.details) ? providerError.details : []).map(d => d.reason);
-    const exhausted = reasons.includes('QUOTA_EXHAUSTED') || ['usage_limit_reached','insufficient_quota'].includes(providerError.type ?? providerError.code);
+    const failure = upstreamFailureDetails(providerError, response.headers);
+    // OpenAI-style bodies name the same condition outside `details`.
+    const exhausted = failure.quota || ['usage_limit_reached', 'insufficient_quota'].includes(providerError.type ?? providerError.code);
     const code = response.status === 401 ? 'AUTH' : response.status === 403 ? 'PERMISSION'
       : response.status === 429 && exhausted ? 'QUOTA'
       : response.status === 429 ? 'RATE_LIMIT' : response.status >= 500 ? 'SERVER' : 'INVALID_REQUEST';
-    const header = response.headers.get('retry-after');
-    const rawDelay = (providerError.details ?? []).find?.(d => typeof d.retryDelay === 'string')?.retryDelay;
-    const retry = header && Number.isFinite(Number(header)) ? Number(header) * 1000 : header ? Date.parse(header) - Date.now()
-      : /^\d+(?:\.\d+)?s$/.test(rawDelay ?? '') ? parseFloat(rawDelay) * 1000 : undefined;
-    const hint = code === 'AUTH' ? '请在 Harness 内重新登录。' : code === 'QUOTA' ? '上游明确报告配额耗尽。'
-      : code === 'RATE_LIMIT' ? '上游返回限流或资源暂不可用；该状态本身不能证明账号额度已用尽。' : '';
-    throw new LlmError(`上游返回 HTTP ${response.status}。${hint}${retry > 0 ? ` 建议等待 ${Math.ceil(retry / 1000)} 秒。` : ''}`, code,
-      { status: response.status, ...(retry > 0 && Number.isFinite(retry) ? { providerRetryAfterMs: retry } : {}) });
+    const retry = failure.retryAfterMs;
+    throw new LlmError(`${describeUpstreamFailure(response.status, failure)}${retry > 0 ? ` 建议等待 ${Math.ceil(retry / 1000)} 秒。` : ''}`, code,
+      { status: response.status, ...(retry > 0 ? { providerRetryAfterMs: retry } : {}) });
   }
   return response;
 }

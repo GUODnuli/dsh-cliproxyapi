@@ -169,6 +169,62 @@ test('diagnostics expose raw Gemini 4 keys with their disabled and quota state',
   assert.match(adapter.status('antigravity').message, /上游返回 4 个 Gemini 4/);
 });
 
+test('Antigravity generation envelope carries the authorized project, exact model key and HIGH thinking', async t => {
+  let sent;
+  const accounts = new Accounts(memoryCredentials(), Config({}), async (url, init) => {
+    sent = { url, init, body: JSON.parse(init.body) };
+    return sse([{ response: { candidates: [{ content: { parts: [{ text: 'OK' }] }, finishReason: 'STOP' }] } }]);
+  });
+  await accounts.save('antigravity', { accessToken: 'fixture', projectId: 'project-abc', expiresAt: Date.now() + 3600000 });
+  const model = 'gemini-4-neon-high';
+  const catalog = normalizeModels({ models: { [model]: { maxTokens: 1048576, maxOutputTokens: 65536 } } }, 'antigravity');
+  const adapter = new SubscriptionAdapter(accounts, store({ antigravity: catalog }));
+  t.after(() => { adapter.dispose(); accounts.dispose(); });
+  await collect(adapter.stream({ provider: 'cpa-antigravity', model, maxTokens: 65536,
+    messages: [message('user', [{ type: 'text', text: 'hi' }])] }));
+  assert.equal(sent.body.model, model);
+  assert.equal(sent.body.project, 'project-abc');
+  assert.deepEqual(sent.body.request.generationConfig.thinkingConfig, { thinkingLevel: 'HIGH', includeThoughts: true });
+  assert.equal(sent.body.request.generationConfig.maxOutputTokens, 65536);
+  assert.equal(new URL(sent.url).pathname, '/v1internal:streamGenerateContent');
+  assert.equal(sent.init.headers['user-agent'], antigravityUserAgent(Config({})));
+  assert.equal(sent.init.headers.authorization, 'Bearer fixture');
+});
+
+test('429 responses keep the provider reason codes and delays instead of one fixed sentence', async () => {
+  const fail = (body, headers = {}) => checkedFetch(async () => new Response(JSON.stringify(body),
+    { status: 429, headers: { 'content-type': 'application/json', ...headers } }), 'https://example.test', {})
+    .then(() => assert.fail('expected a rejection'), error => error);
+
+  const capacity = await fail({ error: { code: 429, status: 'RESOURCE_EXHAUSTED', details: [
+    { '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'MODEL_CAPACITY_EXHAUSTED', domain: 'cloudcode-pa.googleapis.com' },
+    { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '12s' },
+  ] } });
+  assert.equal(capacity.code, 'RATE_LIMIT');
+  assert.match(capacity.message, /MODEL_CAPACITY_EXHAUSTED/);
+  assert.match(capacity.message, /不是账号额度结论/);
+  assert.match(capacity.message, /建议等待 12 秒/);
+
+  const quota = await fail({ error: { details: [{ reason: 'QUOTA_EXHAUSTED', quotaResetDelay: '3600s' }] } });
+  assert.equal(quota.code, 'QUOTA');
+  assert.match(quota.message, /QUOTA_EXHAUSTED/);
+  assert.match(quota.message, /建议等待 3600 秒/);
+
+  const header = await fail({ error: { details: [{ reason: 'MODEL_CAPACITY_EXHAUSTED' }] } }, { 'retry-after': '7' });
+  assert.match(header.message, /建议等待 7 秒/);
+  assert.equal(header.failure.providerRetryAfterMs, 7000);
+
+  const bare = await fail({ error: { code: 429, status: 'RESOURCE_EXHAUSTED' } });
+  assert.equal(bare.code, 'RATE_LIMIT');
+  assert.match(bare.message, /未提供 Retry-After 或 error\.details/);
+});
+
+test('rate limits are not retried on a fixed backoff', () => {
+  const adapter = new SubscriptionAdapter(new Accounts(memoryCredentials(), Config({}), async () => json({})),
+    { get: () => ({ codex: [], antigravity: [] }) });
+  assert.deepEqual([...adapter.providerRetryPolicy().retryableCodes], ['NETWORK', 'SERVER']);
+});
+
 test('cancelling one catalog waiter does not cancel the shared provider refresh', async () => {
   let release;
   const accounts = new Accounts(memoryCredentials(), Config({}), () => new Promise(resolve => { release = resolve; }));
@@ -241,7 +297,7 @@ test('image generation is a native tool, persists original bytes, and never sile
 });
 
 test('429 resource exhaustion is not automatically reported as exhausted account quota', async () => {
-  await assert.rejects(checkedFetch(async()=>new Response(JSON.stringify({error:{status:'RESOURCE_EXHAUSTED'}}),{status:429}),'https://example.test',{}),e=>e.code==='RATE_LIMIT' && e.message.includes('不能证明'));
+  await assert.rejects(checkedFetch(async()=>new Response(JSON.stringify({error:{status:'RESOURCE_EXHAUSTED'}}),{status:429}),'https://example.test',{}),e=>e.code==='RATE_LIMIT' && e.message.includes('不能据此判断'));
   await assert.rejects(checkedFetch(async()=>new Response(JSON.stringify({error:{details:[{reason:'QUOTA_EXHAUSTED'}]}}),{status:429}),'https://example.test',{}),e=>e.code==='QUOTA');
 });
 

@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { Accounts } from './src/accounts.js';
 import { Config, PROVIDERS, providerOf } from './src/config.js';
-import { OAuthLogins } from './src/oauth.js';
+import { OAuthLogins, antigravityHeaders } from './src/oauth.js';
 import { SubscriptionAdapter } from './src/adapter.js';
+import { checkedFetch, readSSE } from './src/http.js';
 import { createNetwork, validateProxy } from './src/network.js';
 import { Images, createImageTool } from './src/images.js';
 import { Quotas } from './src/quota.js';
@@ -17,6 +19,7 @@ const HELP = `CPA 订阅账号插件（直接连接上游）
 /cpa models codex — 刷新 Codex 模型
 /cpa models antigravity — 刷新 Antigravity 模型
 /cpa diagnose antigravity — 打印 fetchAvailableModels 原始 Gemini 4 的 disabled / 剩余额度
+/cpa probe antigravity <模型> — 用已保存授权发一次无工具、中立系统提示的极简请求（不重试）
 /cpa quota codex — 刷新 Codex 模型额度（可改为 antigravity）
 /cpa cancel codex — 取消尚未完成的授权
 /cpa logout codex — 退出对应账号（可改为 antigravity）
@@ -89,6 +92,44 @@ export function apply(ctx, config) {
       || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,100}$/.test(patch.images.model ?? '') || !['auto','low','medium','high'].includes(patch.images.quality))) throw new Error('图片设置无效。');
     await preferences.update(patch); network.reset(); adapter.changed();
   };
+  /**
+   * One minimal Antigravity generation with no tools and a neutral system
+   * prompt. It isolates the request envelope from the Harness prompt, and it
+   * never retries: one invocation is one upstream request.
+   */
+  const probeAntigravity = async (model, signal) => {
+    const account = await accounts.current('antigravity', signal);
+    if (!account.projectId) throw new Error('Antigravity 账号缺少项目标识，请重新登录。');
+    const provider = accounts.provider('antigravity');
+    const envelope = {
+      model,
+      project: account.projectId,
+      userAgent: 'antigravity',
+      requestType: 'agent',
+      request: {
+        contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+        systemInstruction: { parts: [{ text: 'You are a helpful assistant.' }] },
+        generationConfig: { maxOutputTokens: 65536, thinkingConfig: { thinkingLevel: 'HIGH', includeThoughts: true } },
+        sessionId: `probe-${randomUUID()}`,
+      },
+    };
+    const response = await checkedFetch(accounts.fetcher, `${provider.generationURL || provider.apiURL}/v1internal:streamGenerateContent?alt=sse`, {
+      method: 'POST',
+      headers: { ...antigravityHeaders(accounts.config, account.accessToken), accept: 'text/event-stream' },
+      body: JSON.stringify(envelope),
+      signal,
+    });
+    let events = 0, text = '';
+    for await (const event of readSSE(response, signal)) {
+      events += 1;
+      const candidate = (event.response || event).candidates?.[0];
+      for (const part of candidate?.content?.parts || []) {
+        if (part.thought !== true && typeof part.text === 'string' && part.text) text ||= part.text.slice(0, 40);
+      }
+    }
+    return { status: response.status, events, text };
+  };
+
   const startupRefresh = new AbortController();
   ctx.provide('cpaSubscriptions', { accounts, adapter, quotas, logins, preferences, network, updatePreferences, refreshAll });
   if (config.refreshOnStartup) void refreshAll({ signal: startupRefresh.signal }).catch(() => {
@@ -130,6 +171,18 @@ export function apply(ctx, config) {
           return { kind: 'success', text: lines.join('\n') };
         }
         providerOf(id);
+        if (action === 'probe') {
+          if (id !== 'antigravity') throw new Error('probe 目前只支持 antigravity。');
+          const model = rest[0];
+          if (!model || rest.length > 1) throw new Error('用法：/cpa probe antigravity <模型 ID>');
+          try {
+            const result = await probeAntigravity(model, signal);
+            return { kind: 'success', text: `极简请求 HTTP ${result.status}，事件 ${result.events}，首段文本：${result.text || '(空)'}` };
+          } catch (error) {
+            const failure = error?.failure ?? {};
+            return { kind: 'error', text: `${error.message}${failure.providerRetryAfterMs ? `（上游建议等待 ${Math.round(failure.providerRetryAfterMs / 1000)} 秒）` : ''}` };
+          }
+        }
         if (rest.length) throw new Error('命令参数过多。输入 /cpa help 查看用法。');
         if (action === 'login') {
           const login = await logins.start(id);

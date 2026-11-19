@@ -43,7 +43,9 @@ export class SubscriptionAdapter extends LlmAdapter {
   providerInfo(route) { return { id: route, name: PROVIDERS[this.idOf(route)].label }; }
   imageRequestTarget(_provider, _model, ref) { return imageRequestTarget(ref, this.accounts.config); }
   providerRetryPolicy() { return resolveRetryPolicy({ mode: 'normal', maxRetries: 2,
-    retryableCodes: ['NETWORK', 'SERVER', 'RATE_LIMIT'] }, 'cpa-subscriptions'); }
+    // A 429 states when the caller may retry; retrying it on a fixed backoff
+    // turns one user action into a burst of identical upstream requests.
+    retryableCodes: ['NETWORK', 'SERVER'] }, 'cpa-subscriptions'); }
   modelEntries(id) { return this.catalog.get()[id].map(model => modelSettings(model, this.preferences.get(), id)); }
   selected(id, model, { imageGeneration = false } = {}) {
     const entry = this.modelEntries(id).find(m => m.id === model);
