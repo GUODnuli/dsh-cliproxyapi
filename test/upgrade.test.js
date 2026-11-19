@@ -225,6 +225,21 @@ test('rate limits are not retried on a fixed backoff', () => {
   assert.deepEqual([...adapter.providerRetryPolicy().retryableCodes], ['NETWORK', 'SERVER']);
 });
 
+test('system carriage stays native unless user-prefix is explicitly configured', () => {
+  const options = { model: 'gemini-4-neon-high', reasoningEffort: 'high', system: 'harness rule',
+    messages: [message('user', [{ type: 'text', text: 'hi' }])] };
+  const native = antigravityRequest(options, 'project-abc', Config({}));
+  assert.equal(native.request.systemInstruction.parts[0].text, 'harness rule');
+  assert.equal(native.request.contents[0].parts[0].text, 'hi');
+  assert.deepEqual(native.request.contents[0].parts, [{ text: 'hi' }]);
+  const prefixed = antigravityRequest(options, 'project-abc', Config({ systemInstructionMode: 'user-prefix' }));
+  assert.equal(prefixed.request.systemInstruction.parts[0].text, 'You are a helpful assistant.');
+  assert.equal(prefixed.request.contents[0].parts[0].text,
+    '[System Instructions]\nharness rule\n[/System Instructions]\n\n');
+  assert.equal(prefixed.request.contents[0].parts[1].text, 'hi');
+  assert.equal(prefixed.request.contents.length, 1);
+});
+
 test('cancelling one catalog waiter does not cancel the shared provider refresh', async () => {
   let release;
   const accounts = new Accounts(memoryCredentials(), Config({}), () => new Promise(resolve => { release = resolve; }));

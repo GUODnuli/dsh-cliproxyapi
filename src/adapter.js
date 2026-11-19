@@ -165,7 +165,7 @@ export class SubscriptionAdapter extends LlmAdapter {
       yield* codexStream(response, options.signal);
     } else {
       if (!account.projectId) throw new LlmError('Antigravity 账号缺少项目标识，请重新登录。', 'AUTH');
-      const body = antigravityRequest(projected, account.projectId); body.requestId = `agent-${randomUUID()}`;
+      const body = antigravityRequest(projected, account.projectId, this.accounts.config); body.requestId = `agent-${randomUUID()}`;
       const response = await checkedFetch(this.accounts.fetcher, `${provider.generationURL || provider.apiURL}/v1internal:streamGenerateContent?alt=sse`, {
         method: 'POST', headers: { ...antigravityHeaders(this.accounts.config, account.accessToken), accept: 'text/event-stream' },
         body: JSON.stringify(body), signal: options.signal });

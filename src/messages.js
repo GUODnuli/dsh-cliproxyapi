@@ -147,7 +147,7 @@ export function geminiSchema(value) {
   return appendDescription(projected, hints.length ? `Constraints: ${hints.join('; ')}.` : '');
 }
 
-export function antigravityRequest(options, projectId) {
+export function antigravityRequest(options, projectId, config) {
   const { messages, system } = history(options);
   const contents = [], names = new Map();
   for (const message of messages) for (const block of message.content)
@@ -183,11 +183,35 @@ export function antigravityRequest(options, projectId) {
     ...(options.maxTokens ? { maxOutputTokens: options.maxTokens } : {}),
     ...(options.reasoningEffort ? { thinkingConfig: { thinkingLevel: options.reasoningEffort.toUpperCase(), includeThoughts: true } } : {}),
   };
-  const request = { contents, ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig,
+  const carried = carrySystemInstruction(contents, system, config?.systemInstructionMode);
+  const request = { contents: carried.contents,
+    ...(carried.system ? { systemInstruction: { parts: [{ text: carried.system }] } } : {}), generationConfig,
     ...(options.tools?.length ? { tools: [{ functionDeclarations: options.tools.map(t => ({
       name: t.name, description: t.description, parameters: geminiSchema(t.parameters) })) }] } : {}),
     ...(options.sessionId ? { sessionId: options.sessionId } : {}) };
   return { model: options.model, project: projectId, userAgent: 'antigravity', requestType: 'agent', request };
+}
+
+/**
+ * Choose how the Harness system text reaches the model.
+ *
+ * `native` is a faithful carriage. `user-prefix` moves the same text into the
+ * first user turn and leaves a neutral top-level system, which is the
+ * documented fallback for a provider that refuses the full system block; it
+ * lowers the instruction's priority, so it remains an explicit opt-in.
+ * @param contents - built conversation turns.
+ * @param system - system text carried from the request, if any.
+ * @param mode - configured carriage mode.
+ * @returns the turns and top-level system text to send.
+ */
+export function carrySystemInstruction(contents, system, mode) {
+  if (mode !== 'user-prefix' || !system) return { contents, system };
+  const prefix = { text: `[System Instructions]\n${system}\n[/System Instructions]\n\n` };
+  const turns = [...contents];
+  const index = turns.findIndex(turn => turn.role === 'user' && turn.parts?.some(part => typeof part.text === 'string'));
+  if (index === -1) turns.unshift({ role: 'user', parts: [prefix] });
+  else turns[index] = { ...turns[index], parts: [prefix, ...turns[index].parts] };
+  return { contents: turns, system: 'You are a helpful assistant.' };
 }
 
 function codexImageParts(block, options) {

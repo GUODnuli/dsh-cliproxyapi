@@ -6,6 +6,12 @@ Antigravity 模型刷新使用该账号已授权的项目查询与生成同域�
 
 所有 `v1internal:*` 请求使用 `antigravity/hub/2.32.2 (aidev_client; os_type=…; arch=…; cl=1022991777)` 这一条 User-Agent，不再拼接 Harness 的 `deepseek-harness` 标识。目录按上游返回动态收录，过滤 `-disabled` 占位符、显式 `disabled` 以及 `quotaInfo` 空或 `remainingFraction ≤ 0` 的条目；`gemini-4-hydrogen-sonar` 隐藏并标记为 `[Internal Sonar / Low-Thinking]`。名称由模型 ID 生成，避免上游展示名把 `gemini-2.5-flash` 错标成其他版本。用 `/cpa diagnose antigravity` 可打印最近一次 `fetchAvailableModels` 返回的全部 Gemini 4 key 及其 `disabled`／剩余额度，设置页“诊断”标签的“复制诊断 JSON”也包含同一份数据。插件启动默认不刷新模型或额度；可手动刷新，或在 `cpa-subscriptions` 的配置中显式设置 `refreshOnStartup: true`。
 
+### 系统指令承载（`systemInstructionMode`）
+
+默认 `native`：Harness 的系统文本原样作为顶层 `systemInstruction` 发送，不改变指令优先级。
+
+`user-prefix` 是显式兜底：同样文本被包进 `[System Instructions]…[/System Instructions]` 并前置到第一条 user 消息，顶层只保留中立的 system 句。它**降低系统指令优先级，不是严格等价转换**，因此不会被自动启用；只在上游对完整 system 块返回 429 时才考虑，并需要自行评估行为差异。实测证据：同一账号、同一模型 `gemini-4-neon-high`，无工具且中立 system 的极简请求返回 200，而完整 DSH 请求返回无 `details` 的裸 429。
+
 ## 上游发布 (2.3.5)
 
 - **强化 Antigravity 工具参数 Schema 兼容性**：深度兼容 Harness 工具复杂 schema（联合类型 `oneOf`/`anyOf`/`allOf`、`const` 以及各类字符串/数字/数组约束），将其投影为 Google Gemini 严格子集结构，将约束平滑转入 description，彻底解决带联合类型/约束的工具声明被拒问题。

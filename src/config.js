@@ -14,6 +14,11 @@ export const Config = Schema.object({
   codexClientVersion: Schema.string().default('0.153.3'),
   catalogTimeoutMs: Schema.number().min(1000).max(120000).default(15000),
   refreshOnStartup: Schema.boolean().default(false),
+  // `native` sends the Harness system text as `systemInstruction`. The
+  // `user-prefix` fallback prepends it to the first user turn and keeps a
+  // neutral top-level system; it changes instruction priority and is never
+  // selected implicitly.
+  systemInstructionMode: Schema.union(['native', 'user-prefix']).default('native'),
   quotaTimeoutMs: Schema.number().min(1000).max(120000).default(20000),
   maxRequestImageBytes: Schema.number().min(1024).default(20971520),
   imagePixelBudget: Schema.number().min(1).default(4194304),
