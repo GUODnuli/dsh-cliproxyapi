@@ -252,7 +252,7 @@ test('tool schema projection keeps const types and gives untyped properties a ty
   }, required: ['mode', 'note'] });
   assert.deepEqual(projected.properties.mode, { type: 'boolean', description: 'Constraints: const=true.' });
   assert.deepEqual(projected.properties.retries, { type: 'integer', description: 'Constraints: const=3.' });
-  assert.deepEqual(projected.properties.choice, { enum: ['a'] });
+  assert.deepEqual(projected.properties.choice, { type: 'string', enum: ['a'] });
   assert.deepEqual(projected.properties.note, { type: 'string', description: 'Constraints: untyped schema projected as string.' });
   assert.deepEqual(projected.properties.list, { type: 'array', items: { type: 'string', description: 'Constraints: untyped schema projected as string.' } });
   assert.deepEqual(projected.required, ['mode', 'note']);
@@ -277,6 +277,17 @@ test('a provider message is truncated and never echoes a bearer token', async ()
     .then(() => assert.fail('expected a rejection'), failure => failure);
   assert.doesNotMatch(error.message, /abc\.def\.ghi/);
   assert.ok(error.message.length < 600);
+});
+
+test('an empty enum value never reaches the wire schema', () => {
+  const projected = geminiSchema({ type: 'object', properties: {
+    permission: { oneOf: [{ enum: ['read-only', 'workspace-write', 'danger-full-access'] }, { const: '' }] },
+    mode: { enum: ['a', ''] },
+  } });
+  assert.deepEqual(projected.properties.permission, { type: 'string', enum: ['read-only', 'workspace-write', 'danger-full-access'] });
+  assert.deepEqual(projected.properties.mode.enum, ['a']);
+  const wire = JSON.stringify(projected);
+  assert.equal(wire.includes('""'), false);
 });
 
 test('rate limits are not retried on a fixed backoff', () => {

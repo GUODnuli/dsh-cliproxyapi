@@ -19,6 +19,9 @@ export const Config = Schema.object({
   // neutral top-level system; it changes instruction priority and is never
   // selected implicitly.
   systemInstructionMode: Schema.union(['native', 'user-prefix']).default('native'),
+  // Diagnostic only: registers `cpa_probe`, which spends one subscription
+  // request per call. Off unless the operator asks for it.
+  exposeProbeTool: Schema.boolean().default(false),
   quotaTimeoutMs: Schema.number().min(1000).max(120000).default(20000),
   maxRequestImageBytes: Schema.number().min(1024).default(20971520),
   imagePixelBudget: Schema.number().min(1).default(4194304),

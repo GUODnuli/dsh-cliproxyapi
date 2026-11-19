@@ -8,6 +8,8 @@ import { createNetwork, validateProxy } from './src/network.js';
 import { Images, createImageTool } from './src/images.js';
 import { Quotas } from './src/quota.js';
 import { geminiSchema } from './src/messages.js';
+import { defineTool } from '@deepseek-ai/dsh-tools';
+import { newestSessionInputs, sessionInputsById } from './src/session-inputs.js';
 
 export { Config };
 export const name = 'cpa-subscriptions';
@@ -98,6 +100,14 @@ export function apply(ctx, config) {
    * prompt. It isolates the request envelope from the Harness prompt, and it
    * never retries: one invocation is one upstream request.
    */
+  /** Inputs for a probe: this Session, an explicit recording, or the newest recording. */
+  const resolveInputs = async (agent, fromId) => {
+    if (fromId) return sessionInputsById(fromId);
+    const live = sessionInputs(agent);
+    if (live.system && live.tools.length) return live;
+    return newestSessionInputs();
+  };
+
   /** Model-visible inputs the calling Session actually sends, for a one-variable probe. */
   const sessionInputs = agent => {
     const events = agent?.session?.events ?? [];
@@ -154,6 +164,30 @@ export function apply(ctx, config) {
   if (config.refreshOnStartup) void refreshAll({ signal: startupRefresh.signal }).catch(() => {
     // Individual refresh failures are reflected in quota/catalog status; startup must remain non-blocking.
   });
+  if (config.exposeProbeTool) ctx.inject(['tools'], probeCtx => {
+    probeCtx.effect(() => probeCtx.tools.register(defineTool({
+      name: 'cpa_probe',
+      description: 'Send exactly one Antigravity generation request and never retry, to isolate whether the '
+        + 'recorded system text or the recorded tool schemas cause an upstream rejection. Call it only when the user '
+        + 'asks for this comparison; each call spends one subscription request.',
+      parameters: {
+        model: { type: 'string', required: true, description: 'Antigravity model id, e.g. gemini-4-neon-high.' },
+        system: { type: 'string', enum: ['neutral', 'session'], description: 'neutral sends one assistant line; session sends the recorded DSH system text.' },
+        tools: { type: 'string', enum: ['none', 'session'], description: 'none sends no tool declarations; session sends the recorded tool schemas.' },
+        sessionId: { type: 'string', description: 'Recorded Session id to take inputs from; defaults to the newest recording that carries both.' },
+      },
+      output: { schema: { type: 'string' }, render: (_args, result) => [{ type: 'text', text: result }] },
+      async execute(args, exec) {
+        const inputs = args.sessionId ? await sessionInputsById(args.sessionId) : await newestSessionInputs();
+        const result = await probeAntigravity(args.model, exec.signal, {
+          system: args.system === 'session' ? inputs.system : undefined,
+          tools: args.tools === 'session' ? inputs.tools : [],
+        });
+        return `HTTP ${result.status}，事件 ${result.events}，首段文本：${result.text || '(空)'}`
+          + `（system=${args.system === 'session' ? `${inputs.system.length} 字符` : '中立'}，tools=${args.tools === 'session' ? inputs.tools.length : 0}）`;
+      },
+    })));
+  });
   ctx.on('dispose', () => {
     startupRefresh.abort(new Error('CPA 插件已停止。'));
     logins.dispose(); adapter.dispose(); quotas.dispose(); accounts.dispose();
@@ -193,16 +227,23 @@ export function apply(ctx, config) {
         if (action === 'probe') {
           if (id !== 'antigravity') throw new Error('probe 目前只支持 antigravity。');
           const model = rest[0];
-          const flags = new Set(rest.slice(1));
-          if (!model || flags.size !== rest.length - 1) throw new Error('用法：/cpa probe antigravity <模型 ID> [--system] [--tools]');
-          const inputs = sessionInputs(agent);
-          if (flags.has('--system') && !inputs.system) throw new Error('当前会话没有可复用的 system 文本。');
-          if (flags.has('--tools') && !inputs.tools.length) throw new Error('当前会话没有可复用的工具定义。');
-          const shape = `system=${flags.has('--system') ? `${inputs.system.length} 字符` : '中立'}，tools=${flags.has('--tools') ? inputs.tools.length : 0}`;
+          const flags = rest.slice(1);
+          const model2 = model;
+          const fromIndex = flags.indexOf('--from');
+          if (fromIndex >= 0 && !flags[fromIndex + 1]) throw new Error('--from 需要一个会话 ID。');
+          const fromId = fromIndex >= 0 ? flags[fromIndex + 1] : undefined;
+          const switches = flags.filter((flag, index) => flag !== '--from' && (fromIndex < 0 || index !== fromIndex + 1));
+          if (!model2 || switches.some(flag => !['--system', '--tools'].includes(flag))) {
+            throw new Error('用法：/cpa probe antigravity <模型 ID> [--system] [--tools] [--from <会话 ID>]');
+          }
+          const inputs = await resolveInputs(agent, fromId);
+          if (switches.includes('--system') && !inputs.system) throw new Error('没有可复用的 system 文本。');
+          if (switches.includes('--tools') && !inputs.tools.length) throw new Error('没有可复用的工具定义。');
+          const shape = `system=${switches.includes('--system') ? `${inputs.system.length} 字符` : '中立'}，tools=${switches.includes('--tools') ? inputs.tools.length : 0}${fromId ? `，来自 ${fromId}` : ''}`;
           try {
             const result = await probeAntigravity(model, signal, {
-              system: flags.has('--system') ? inputs.system : undefined,
-              tools: flags.has('--tools') ? inputs.tools : [],
+              system: switches.includes('--system') ? inputs.system : undefined,
+              tools: switches.includes('--tools') ? inputs.tools : [],
             });
             return { kind: 'success', text: `极简请求（${shape}）HTTP ${result.status}，事件 ${result.events}，首段文本：${result.text || '(空)'}` };
           } catch (error) {
